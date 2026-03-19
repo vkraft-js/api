@@ -121,44 +121,40 @@ export class VK {
 	 * );
 	 * ```
 	 */
-	readonly api = new Proxy(
-		{} as Record<string, Record<string, Function>> as unknown as SuppressedAPIMethods,
-		{
-			get: (
-				_target: Record<string, Record<string, Function>>,
-				category: string,
-			) =>
-				// biome-ignore lint/suspicious/noAssignInExpressions: cache the category proxy
-				(_target[category] ??= new Proxy(
-					{} as Record<string, Function>,
-					{
-						get: (
-							_catTarget: Record<string, Function>,
-							method: string,
-						) =>
-							// biome-ignore lint/suspicious/noAssignInExpressions: cache the method function
-							(_catTarget[method] ??= (
-								args: Record<string, unknown>,
-								requestOptions?: RequestOptions,
-							) => {
-								const callSite = new Error();
-								if (Error.captureStackTrace) {
-									Error.captureStackTrace(
-										callSite,
-										_catTarget[method],
-									);
-								}
-								return this._callApi(
-									`${category}.${method}`,
-									args,
-									requestOptions,
-									callSite,
-								);
-							}),
+	readonly api: SuppressedAPIMethods = this._createApiProxy();
+
+	private _createApiProxy(): SuppressedAPIMethods {
+		const cache: Record<string, unknown> = {};
+		return new Proxy({} as SuppressedAPIMethods, {
+			get: (_, category: string) => {
+				if (cache[category]) return cache[category];
+				const methods: Record<string, unknown> = {};
+				cache[category] = new Proxy({} as SuppressedAPIMethods[keyof SuppressedAPIMethods], {
+					get: (_, method: string) => {
+						if (methods[method]) return methods[method];
+						const fn = (
+							args: Record<string, unknown>,
+							requestOptions?: RequestOptions,
+						) => {
+							const callSite = new Error();
+							if (Error.captureStackTrace) {
+								Error.captureStackTrace(callSite, fn);
+							}
+							return this._callApi(
+								`${category}.${method}`,
+								args,
+								requestOptions,
+								callSite,
+							);
+						};
+						methods[method] = fn;
+						return fn;
 					},
-				)),
-		},
-	);
+				});
+				return cache[category];
+			},
+		});
+	}
 
 	private async _callApi(
 		method: string,

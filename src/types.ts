@@ -53,32 +53,26 @@ export type RequestOptions = Omit<RequestInit, "method" | "body">;
 /**
  * Wraps a single method signature, adding `suppress` and per-request `RequestOptions`.
  *
- * For overloaded methods (callable interfaces), preserves the original signatures as-is
- * — suppress still works at runtime, just not reflected at the type level for overloads.
+ * Uses overloads: call with `suppress: true` to get `VKAPIError | R` return.
+ * For overloaded methods (callable interfaces), preserves the original signatures as-is.
  */
-type WrapMethod<M, S extends boolean | undefined = undefined> =
-	M extends CallAPIWithoutParams<infer R>
-		? <IsSuppressed extends boolean | undefined = S>(
-				params?: Suppress<IsSuppressed>,
-				requestOptions?: RequestOptions,
-			) => Promise<
-				true extends IsSuppressed ? VKAPIError | R : R
-			>
-		: M extends CallAPIWithOptionalParams<infer P, infer R>
-			? <IsSuppressed extends boolean | undefined = S>(
-					params?: P & Suppress<IsSuppressed>,
-					requestOptions?: RequestOptions,
-				) => Promise<
-					true extends IsSuppressed ? VKAPIError | R : R
-				>
-			: M extends CallAPI<infer P, infer R>
-				? <IsSuppressed extends boolean | undefined = S>(
-						params: P & Suppress<IsSuppressed>,
-						requestOptions?: RequestOptions,
-					) => Promise<
-						true extends IsSuppressed ? VKAPIError | R : R
-					>
-				: M; // Overloaded methods (callable interfaces) — preserve as-is
+type WrapMethod<M> =
+	M extends CallAPI<infer P, infer R>
+		? {} extends P
+			? {
+					(params?: P, requestOptions?: RequestOptions): Promise<R>;
+					(params: P & { suppress: true }, requestOptions?: RequestOptions): Promise<VKAPIError | R>;
+				}
+			: {
+					(params: P, requestOptions?: RequestOptions): Promise<R>;
+					(params: P & { suppress: true }, requestOptions?: RequestOptions): Promise<VKAPIError | R>;
+				}
+		: M extends CallAPIWithoutParams<infer R>
+			? {
+					(requestOptions?: RequestOptions): Promise<R>;
+					(params: { suppress: true }, requestOptions?: RequestOptions): Promise<VKAPIError | R>;
+				}
+			: M;
 
 // === API Methods Map ===
 

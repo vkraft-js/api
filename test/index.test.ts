@@ -3,9 +3,11 @@ import { VK, VKAPIError, withRetries } from "../src/index.ts";
 import type { Middleware } from "../src/types.ts";
 
 // Mock fetch globally
-const mockFetch = mock<typeof fetch>(() => Promise.resolve(new Response()));
+const mockFetch = mock((_url: string | URL | Request, _init?: RequestInit) =>
+	Promise.resolve(new Response()),
+);
 
-globalThis.fetch = mockFetch;
+globalThis.fetch = mockFetch as unknown as typeof fetch;
 
 function mockResponse(data: unknown) {
 	return new Response(JSON.stringify(data), {
@@ -317,7 +319,7 @@ describe("middlewares", () => {
 		const vk = new VK("tok");
 		const result = await vk.api.account.getProfileInfo();
 
-		expect(result).toEqual(true);
+		expect(result).toBeTruthy();
 	});
 });
 

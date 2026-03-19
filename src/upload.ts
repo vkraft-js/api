@@ -239,14 +239,14 @@ export class Upload {
 	/** Upload a chat cover photo */
 	chatPhoto(
 		file: UploadFile,
-		params?: PhotosGetChatUploadServerParams,
+		params: PhotosGetChatUploadServerParams,
 		requestOptions?: RequestOptions,
 	): Promise<MessagesSetChatPhotoResponse> {
 		return this._conduct({
 			file,
 			fieldName: "file",
 			getServer: () =>
-				this.vk.api.photos.getChatUploadServer(params ?? {}),
+				this.vk.api.photos.getChatUploadServer(params),
 			save: (uploaded) =>
 				this.vk.api.messages.setChatPhoto({
 					file: uploaded.response,

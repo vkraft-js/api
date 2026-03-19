@@ -23,5 +23,5 @@
     "noPropertyAccessFromIndexSignature": false,
 
   },
-  "include": ["src"]
+  "include": ["src", "test", "examples"]
 }

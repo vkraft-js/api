@@ -62,7 +62,7 @@
 	},
 	"type": "module",
 	"devDependencies": {
-		"@types/bun": "^1.2.9",
+		"@types/bun": "^1.3.11",
 		"mitata": "^1.0.34",
 		"pkgroll": "^2.12.1",
 		"typescript": "^5.8.3"
