@@ -130,17 +130,28 @@ const vk = new VK("ACCESS_TOKEN", {
 ```ts
 import { VK } from "@vkraft/api";
 import { LongPoll } from "@vkraft/api/updates";
+import { Upload, MediaUpload } from "@vkraft/api/upload";
 
 const vk = new VK(process.env.VK_TOKEN as string);
+const up = new Upload(vk);
 const polling = new LongPoll(vk, { group_id: 123456 });
 
 for await (const event of polling) {
     if (event.type === "message_new") {
-        await vk.api.messages.send({
-            peer_id: (event.object as { message: { peer_id: number } }).message.peer_id,
-            message: "pong",
-            random_id: 0,
-        });
+        const { peer_id, text } = event.object.message!;
+
+        if (text === "!cat") {
+            const photo = await up.messagePhoto(
+                MediaUpload.url("https://cataas.com/cat"),
+                { peer_id },
+            );
+
+            await vk.api.messages.send({
+                peer_id,
+                attachment: photo.toString(),
+                random_id: 0,
+            });
+        }
     }
 }
 ```

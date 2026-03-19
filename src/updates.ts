@@ -3,7 +3,9 @@
  * @module
  */
 import type { VK } from "./index.ts";
-import type { VKCallbackType } from "@vkraft/types";
+import type { VKCallbackEventMap } from "@vkraft/types";
+
+export type { VKCallbackEventMap } from "@vkraft/types";
 
 export interface LongPollOptions {
 	/** Community ID */
@@ -12,12 +14,15 @@ export interface LongPollOptions {
 	wait?: number;
 }
 
-export interface LongPollEvent {
-	type: VKCallbackType;
-	object: Record<string, unknown>;
-	group_id: number;
-	event_id: string;
-}
+/** Discriminated union of all VK callback events — narrows `object` type based on `type` */
+export type LongPollEvent = {
+	[K in keyof VKCallbackEventMap]: {
+		type: K;
+		object: VKCallbackEventMap[K];
+		group_id: number;
+		event_id: string;
+	};
+}[keyof VKCallbackEventMap];
 
 /** Raw long poll server response */
 interface LongPollResponse {
@@ -41,7 +46,9 @@ interface LongPollResponse {
  * const polling = new LongPoll(vk, { group_id: 123456 });
  *
  * for await (const event of polling) {
- *   console.log(event.type, event.object);
+ *   if (event.type === "message_new") {
+ *     event.object.message; // fully typed!
+ *   }
  * }
  * ```
  */
