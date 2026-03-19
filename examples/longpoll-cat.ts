@@ -12,7 +12,7 @@ for await (const event of polling) {
     console.log(`[${event.type}]`, JSON.stringify(event.object).slice(0, 100));
 
     if (event.type === "message_new") {
-        const { peer_id, text } = event.object.message!;
+        const { peer_id, text } = event.object.message;
 
         if (text === "!cat") {
             const photo = await up.messagePhoto(

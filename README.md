@@ -138,7 +138,7 @@ const polling = new LongPoll(vk, { group_id: 123456 });
 
 for await (const event of polling) {
     if (event.type === "message_new") {
-        const { peer_id, text } = event.object.message!;
+        const { peer_id, text } = event.object.message;
 
         if (text === "!cat") {
             const photo = await up.messagePhoto(
