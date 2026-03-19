@@ -123,13 +123,46 @@ const vk = new VK("ACCESS_TOKEN", {
 });
 ```
 
-### File upload
+### Upload
 
-VK file uploads follow a 3-step process. The `upload` helper and `MediaInput` factory simplify step 2:
+The `Upload` class automates the VK 3-step upload flow (get server → upload file → save):
 
 ```ts
 import { VK } from "@vkraft/api";
-import { upload, MediaInput } from "@vkraft/api/file";
+import { Upload, MediaUpload } from "@vkraft/api/upload";
+
+const vk = new VK("ACCESS_TOKEN");
+const up = new Upload(vk);
+
+// Photo from file path
+const photos = await up.messagePhoto(
+    MediaUpload.path("./photo.jpg"),
+    { peer_id: 123 },
+);
+
+// Photo from URL
+const wallPhotos = await up.wallPhoto(
+    MediaUpload.url("https://example.com/pic.png"),
+    { group_id: 12345, caption: "Nice photo" },
+);
+
+// Document from buffer
+const doc = await up.document(
+    MediaUpload.buffer(data, "report.pdf"),
+    { title: "Q4 Report" },
+);
+```
+
+Available methods: `messagePhoto`, `wallPhoto`, `albumPhoto`, `ownerPhoto`, `ownerCoverPhoto`, `chatPhoto`, `marketAlbumPhoto`, `document`, `messageDocument`, `wallDocument`, `marketProductPhoto`, `storiesPhoto`, `storiesVideo`.
+
+<details>
+<summary>Low-level 3-step upload</summary>
+
+For custom upload flows, use the low-level `upload` helper and `MediaUpload` factory directly:
+
+```ts
+import { VK } from "@vkraft/api";
+import { upload, MediaUpload } from "@vkraft/api/file";
 
 const vk = new VK("ACCESS_TOKEN");
 
@@ -139,7 +172,7 @@ const server = await vk.api.photos.getMessagesUploadServer({
 });
 
 // Step 2: Upload file
-const file = await MediaInput.path("./photo.jpg");
+const file = await MediaUpload.path("./photo.jpg");
 const uploaded = await upload(server.upload_url, "photo", file);
 
 // Step 3: Save
@@ -149,6 +182,8 @@ const saved = await vk.api.photos.saveMessagesPhoto({
     hash: uploaded.hash as string,
 });
 ```
+
+</details>
 
 ### Retry on rate limit
 

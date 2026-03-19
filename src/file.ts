@@ -22,7 +22,7 @@ import type { RequestOptions } from "./types.ts";
  * @example
  * ```ts
  * import { VK } from "@vkraft/api";
- * import { upload, MediaInput } from "@vkraft/api/file";
+ * import { upload, MediaUpload } from "@vkraft/api/file";
  *
  * const vk = new VK("ACCESS_TOKEN");
  *
@@ -30,7 +30,7 @@ import type { RequestOptions } from "./types.ts";
  * const server = await vk.api.photos.getMessagesUploadServer({ peer_id: 123 });
  *
  * // Step 2: Upload file
- * const file = await MediaInput.path("./photo.jpg");
+ * const file = await MediaUpload.path("./photo.jpg");
  * const uploaded = await upload(server.upload_url, "photo", file);
  *
  * // Step 3: Save
@@ -69,22 +69,25 @@ export async function upload(
  *
  * @example
  * ```ts
- * import { MediaInput } from "@vkraft/api/file";
+ * import { MediaUpload } from "@vkraft/api/file";
  *
  * // From Buffer
- * const file = MediaInput.buffer(buffer, "photo.jpg");
+ * const file = MediaUpload.buffer(buffer, "photo.jpg");
  *
  * // From Blob
- * const file = MediaInput.blob(blob, "photo.jpg");
+ * const file = MediaUpload.blob(blob, "photo.jpg");
+ *
+ * // From text string
+ * const file = MediaUpload.text("<xml>data</xml>", "data.xml");
  *
  * // From URL (fetches content)
- * const file = await MediaInput.url("https://example.com/photo.jpg");
+ * const file = await MediaUpload.url("https://example.com/photo.jpg");
  *
  * // From file path (cross-runtime: Bun.file / node:fs)
- * const file = await MediaInput.path("./photo.jpg");
+ * const file = await MediaUpload.path("./photo.jpg");
  * ```
  */
-export const MediaInput = {
+export const MediaUpload = {
 	/** Create a File from a Buffer/Uint8Array */
 	buffer(data: BufferSource, filename: string, type?: string): File {
 		return new File([data], filename, type ? { type } : undefined);
@@ -93,6 +96,11 @@ export const MediaInput = {
 	/** Create a File from a Blob */
 	blob(blob: Blob, filename: string): File {
 		return new File([blob], filename, { type: blob.type });
+	},
+
+	/** Create a File from a text string */
+	text(text: string, filename = "file.txt"): File {
+		return new File([text], filename, { type: "text/plain" });
 	},
 
 	/** Fetch content from a URL and return as a File */
@@ -125,3 +133,6 @@ export const MediaInput = {
 		return new File([buffer], name);
 	},
 };
+
+/** @deprecated Use {@link MediaUpload} instead */
+export const MediaInput = MediaUpload;

@@ -16,7 +16,8 @@ Thin VK API wrapper for TypeScript/JavaScript.
 - **Middleware chain**: Composable `(context, next)` pattern, executed in array order
 - **Auth**: `access_token` and `v` injected into JSON body (or URL query string for FormData)
 - **Error handling**: `VKAPIError` with `suppress: true` option to return instead of throw
-- **File upload**: Separate `src/file.ts` with `upload()` helper and `MediaInput` factory
+- **File upload**: `src/file.ts` with low-level `upload()` helper and `MediaUpload` factory
+- **Upload class**: `src/upload.ts` — high-level `Upload` class automating the 3-step VK upload flow (13 methods)
 
 ## Types dependency
 
