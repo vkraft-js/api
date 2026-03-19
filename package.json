@@ -1,0 +1,59 @@
+{
+	"name": "wrappergram",
+	"version": "2.0.0",
+	"main": "./dist/index.cjs",
+	"description": "Simple and tiny Telegram Bot API wrapper with middleware hooks and opt-in file/format support",
+	"keywords": [
+		"telegram",
+		"telegram-bot",
+		"telegram-bot-api",
+		"bot",
+		"framework",
+		"library",
+		"wrapper",
+		"types",
+		"client",
+		"tiny",
+		"long-polling"
+	],
+	"scripts": {
+		"prepublishOnly": "bunx pkgroll"
+	},
+	"module": "./dist/index.js",
+	"types": "./dist/index.d.ts",
+	"exports": {
+		".": {
+			"require": {
+				"types": "./dist/index.d.cts",
+				"default": "./dist/index.cjs"
+			},
+			"import": {
+				"types": "./dist/index.d.ts",
+				"default": "./dist/index.js"
+			}
+		},
+		"./utils": {
+			"require": {
+				"types": "./dist/utils.d.cts",
+				"default": "./dist/utils.cjs"
+			},
+			"import": {
+				"types": "./dist/utils.d.ts",
+				"default": "./dist/utils.js"
+			}
+		}
+	},
+	"type": "module",
+	"devDependencies": {
+		"@types/bun": "^1.2.9",
+		"mitata": "^1.0.34",
+		"pkgroll": "^2.12.1",
+		"typescript": "^5.8.3"
+	},
+	"dependencies": {
+		"@gramio/types": "^9.0.1"
+	},
+	"sideEffects": false,
+	"files": ["dist"],
+	"license": "MIT"
+}
