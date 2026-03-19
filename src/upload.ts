@@ -37,7 +37,7 @@ import type {
 } from "@vkraft/types";
 import { upload } from "./file.ts";
 
-export { MediaUpload, MediaInput } from "./file.ts";
+export { MediaUpload } from "./file.ts";
 
 /** File or a promise that resolves to a File (from {@link MediaUpload} factories) */
 export type UploadFile = File | Promise<File>;

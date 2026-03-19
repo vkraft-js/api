@@ -133,6 +133,3 @@ export const MediaUpload = {
 		return new File([buffer], name);
 	},
 };
-
-/** @deprecated Use {@link MediaUpload} instead */
-export const MediaInput = MediaUpload;
