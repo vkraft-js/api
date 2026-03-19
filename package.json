@@ -58,6 +58,16 @@
 				"types": "./dist/upload.d.ts",
 				"default": "./dist/upload.js"
 			}
+		},
+		"./updates": {
+			"require": {
+				"types": "./dist/updates.d.cts",
+				"default": "./dist/updates.cjs"
+			},
+			"import": {
+				"types": "./dist/updates.d.ts",
+				"default": "./dist/updates.js"
+			}
 		}
 	},
 	"type": "module",

@@ -123,6 +123,67 @@ const vk = new VK("ACCESS_TOKEN", {
 });
 ```
 
+### Long Polling
+
+`LongPoll` is a low-level async iterable transport for the [Bots Long Poll API](https://dev.vk.com/en/api/bots-long-poll/getting-started). It handles reconnection automatically and yields events one by one with built-in backpressure — the next batch of events won't be fetched until the current one is fully processed.
+
+```ts
+import { VK } from "@vkraft/api";
+import { LongPoll } from "@vkraft/api/updates";
+
+const vk = new VK(process.env.VK_TOKEN as string);
+const polling = new LongPoll(vk, { group_id: 123456 });
+
+for await (const event of polling) {
+    if (event.type === "message_new") {
+        await vk.api.messages.send({
+            peer_id: (event.object as { message: { peer_id: number } }).message.peer_id,
+            message: "pong",
+            random_id: 0,
+        });
+    }
+}
+```
+
+Call `polling.stop()` to gracefully break out of the loop after the current event.
+
+| Option | Default | Description |
+|---|---|---|
+| `group_id` | — | Community ID (required) |
+| `wait` | `25` | Long poll server timeout in seconds |
+
+<details>
+<summary>Concurrent event processing</summary>
+
+By default, `for await` creates natural backpressure — `yield` pauses the generator until the consumer finishes processing the current event, so the next `fetch` won't happen until the entire batch is handled sequentially.
+
+To process events concurrently, don't `await` inside the loop:
+
+```ts
+for await (const event of polling) {
+    // fire-and-forget — yield unblocks immediately
+    handleEvent(event).catch(console.error);
+}
+```
+
+For bounded concurrency:
+
+```ts
+const pool = new Set<Promise<void>>();
+const MAX = 10;
+
+for await (const event of polling) {
+    const task = handleEvent(event)
+        .catch(console.error)
+        .finally(() => pool.delete(task));
+    pool.add(task);
+
+    if (pool.size >= MAX) await Promise.race(pool);
+}
+```
+
+</details>
+
 ### Upload
 
 The `Upload` class automates the VK 3-step upload flow (get server → upload file → save):

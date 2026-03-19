@@ -1,7 +1,10 @@
 {
     "name": "@vkraft/api",
     "version": "0.0.1",
-    "exports": "./src/index.ts",
+    "exports": {
+        ".": "./src/index.ts",
+        "./updates": "./src/updates.ts"
+    },
     "publish": {
         "include": ["src", "README.md", "LICENSE"]
     },
