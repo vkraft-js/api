@@ -51,28 +51,41 @@ export type RequestOptions = Omit<RequestInit, "method" | "body">;
 // === Wrap Method ===
 
 /**
+ * True if M has exactly one call signature (simple function).
+ * False for callable interfaces with multiple overloads (e.g. friends.get with fields/extended).
+ * Uses reconstruction check: rebuild from last signature → if it extends M, it's a single sig.
+ */
+type IsSingleSignature<M> =
+	M extends (...args: infer A) => infer R
+		? ((...args: A) => R) extends M ? true : false
+		: false;
+
+/**
  * Wraps a single method signature, adding `suppress` and per-request `RequestOptions`.
  *
  * Uses overloads: call with `suppress: true` to get `VKAPIError | R` return.
- * For overloaded methods (callable interfaces), preserves the original signatures as-is.
+ * For overloaded methods (callable interfaces like friends.get with fields/extended),
+ * preserves the original signatures as-is — suppress still works at runtime.
  */
 type WrapMethod<M> =
-	M extends CallAPI<infer P, infer R>
-		? {} extends P
-			? {
-					(params?: P, requestOptions?: RequestOptions): Promise<R>;
-					(params: P & { suppress: true }, requestOptions?: RequestOptions): Promise<VKAPIError | R>;
-				}
-			: {
-					(params: P, requestOptions?: RequestOptions): Promise<R>;
-					(params: P & { suppress: true }, requestOptions?: RequestOptions): Promise<VKAPIError | R>;
-				}
-		: M extends CallAPIWithoutParams<infer R>
-			? {
-					(requestOptions?: RequestOptions): Promise<R>;
-					(params: { suppress: true }, requestOptions?: RequestOptions): Promise<VKAPIError | R>;
-				}
-			: M;
+	IsSingleSignature<M> extends true
+		? M extends CallAPI<infer P, infer R>
+			? {} extends P
+				? {
+						(params?: P, requestOptions?: RequestOptions): Promise<R>;
+						(params: P & { suppress: true }, requestOptions?: RequestOptions): Promise<VKAPIError | R>;
+					}
+				: {
+						(params: P, requestOptions?: RequestOptions): Promise<R>;
+						(params: P & { suppress: true }, requestOptions?: RequestOptions): Promise<VKAPIError | R>;
+					}
+			: M extends CallAPIWithoutParams<infer R>
+				? {
+						(requestOptions?: RequestOptions): Promise<R>;
+						(params: { suppress: true }, requestOptions?: RequestOptions): Promise<VKAPIError | R>;
+					}
+				: M
+		: M; // Overloaded callable interfaces — preserve as-is
 
 // === API Methods Map ===
 

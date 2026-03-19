@@ -11,8 +11,13 @@ import type {
 	UsersGetParams,
 	BaseOkResponse,
 	WallPostResponse,
+	FriendsGetResponse,
+	FriendsGetFieldsResponse,
+	WallGetResponse,
+	WallGetExtendedResponse,
 	PhotosSaveMessagesPhotoResponse,
 } from "@vkraft/types";
+import type { WithFields } from "@vkraft/types/utils";
 
 /** Fails to compile if A is not exactly B */
 type IsExact<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false;
@@ -119,6 +124,40 @@ describe("per-request options", () => {
 	it("rejects method and body", () => {
 		// @ts-expect-error — method is not allowed in RequestOptions
 		vk.api.users.get({ user_ids: [1] }, { method: "GET" });
+	});
+});
+
+// ============================
+// Smart responses — overloaded methods preserved (not collapsed to last sig)
+// ============================
+describe("smart response overloads are preserved", () => {
+	it("friends.get without fields returns FriendsGetResponse (ids)", async () => {
+		const result = await vk.api.friends.get({ user_id: 1 });
+		type _Check = Assert<IsExact<typeof result, FriendsGetResponse>>;
+	});
+
+	it("friends.get with fields returns narrowed WithFields response", () => {
+		// Compile-time only — verify the overload resolves to narrowed type
+		async function _check() {
+			const result = await vk.api.friends.get({
+				user_id: 1,
+				fields: ["photo_100", "sex"],
+			});
+			// Should be narrowed — photo_100 and sex required on items
+			const _item: { photo_100: string; sex: number } = result.items[0];
+			void _item;
+		}
+		void _check;
+	});
+
+	it("wall.get without extended returns WallGetResponse", async () => {
+		const result = await vk.api.wall.get({ domain: 1 });
+		type _Check = Assert<IsExact<typeof result, WallGetResponse>>;
+	});
+
+	it("wall.get with extended returns WallGetExtendedResponse", async () => {
+		const result = await vk.api.wall.get({ domain: 1, extended: 1 });
+		type _Check = Assert<IsExact<typeof result, WallGetExtendedResponse>>;
 	});
 });
 
