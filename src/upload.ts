@@ -6,7 +6,6 @@ import type { VK } from "./index.ts";
 import type { RequestOptions } from "./types.ts";
 import type {
 	PhotosGetMessagesUploadServerParams,
-	PhotosSaveMessagesPhotoParams,
 	PhotosGetWallUploadServerParams,
 	PhotosSaveWallPhotoParams,
 	PhotosGetUploadServerParams,
@@ -46,7 +45,10 @@ interface ConductRecipe<TResult> {
 	file: UploadFile;
 	getServer: () => Promise<{ upload_url: string }>;
 	fieldName: string;
-	save?: (uploaded: Record<string, unknown>) => Promise<TResult>;
+	// biome-ignore lint/suspicious/noExplicitAny: VK upload server response is untyped JSON
+	save?: (uploaded: any) => Promise<TResult>;
+	/** VK attachment type prefix (e.g. "photo", "doc") — enables `.toString()` on the result */
+	attachmentType?: string;
 	requestOptions?: RequestOptions;
 }
 
@@ -83,8 +85,26 @@ export class Upload {
 			undefined,
 			recipe.requestOptions,
 		);
-		if (recipe.save) return recipe.save(uploaded);
-		return uploaded as TResult;
+		const result = recipe.save
+			? await recipe.save(uploaded)
+			: (uploaded as TResult);
+
+		if (recipe.attachmentType) {
+			const type = recipe.attachmentType;
+			const toAttachmentString = (item: Record<string, unknown>) => {
+				const base = `${type}${item.owner_id}_${item.id}`;
+				return item.access_key ? `${base}_${item.access_key}` : base;
+			};
+
+			if (Array.isArray(result)) {
+				result.toString = () => result.map(toAttachmentString).join(",");
+			} else if (result && typeof result === "object") {
+				(result as Record<string, unknown>).toString = () =>
+					toAttachmentString(result as Record<string, unknown>);
+			}
+		}
+
+		return result;
 	}
 
 	/** Upload a photo for a private message */
@@ -93,16 +113,14 @@ export class Upload {
 		params?: PhotosGetMessagesUploadServerParams,
 		requestOptions?: RequestOptions,
 	): Promise<PhotosSaveMessagesPhotoResponse> {
-		const { ...serverParams } = params ?? {};
 		return this._conduct({
 			file,
 			fieldName: "photo",
+			attachmentType: "photo",
 			getServer: () =>
-				this.vk.api.photos.getMessagesUploadServer(serverParams),
+				this.vk.api.photos.getMessagesUploadServer(params ?? {}),
 			save: (uploaded) =>
-				this.vk.api.photos.saveMessagesPhoto(
-					uploaded as unknown as PhotosSaveMessagesPhotoParams,
-				),
+				this.vk.api.photos.saveMessagesPhoto(uploaded),
 			requestOptions,
 		});
 	}
@@ -118,17 +136,14 @@ export class Upload {
 		return this._conduct({
 			file,
 			fieldName: "photo",
+			attachmentType: "photo",
 			getServer: () =>
 				this.vk.api.photos.getWallUploadServer({ group_id: group_id! }),
 			save: (uploaded) =>
 				this.vk.api.photos.saveWallPhoto({
 					...saveParams,
 					group_id,
-					...(uploaded as {
-						photo: string;
-						server: number;
-						hash: string;
-					}),
+					...uploaded,
 				}),
 			requestOptions,
 		});
@@ -145,6 +160,7 @@ export class Upload {
 		return this._conduct({
 			file,
 			fieldName: "file1",
+			attachmentType: "photo",
 			getServer: () =>
 				this.vk.api.photos.getUploadServer({
 					album_id: album_id!,
@@ -155,11 +171,7 @@ export class Upload {
 					...saveParams,
 					album_id,
 					group_id,
-					...(uploaded as {
-						server: number;
-						photos_list: string;
-						hash: string;
-					}),
+					...uploaded,
 				}),
 			requestOptions,
 		});
@@ -183,11 +195,7 @@ export class Upload {
 			save: (uploaded) =>
 				this.vk.api.photos.saveOwnerPhoto({
 					...saveParams,
-					...(uploaded as {
-						photo: string;
-						server: string;
-						hash: string;
-					}),
+					...uploaded,
 				}),
 			requestOptions,
 		});
@@ -222,7 +230,7 @@ export class Upload {
 			save: (uploaded) =>
 				this.vk.api.photos.saveOwnerCoverPhoto({
 					...saveParams,
-					...(uploaded as { photo: string; hash: string }),
+					...uploaded,
 				}),
 			requestOptions,
 		});
@@ -234,15 +242,14 @@ export class Upload {
 		params?: PhotosGetChatUploadServerParams,
 		requestOptions?: RequestOptions,
 	): Promise<MessagesSetChatPhotoResponse> {
-		const { ...serverParams } = params ?? {};
 		return this._conduct({
 			file,
 			fieldName: "file",
 			getServer: () =>
-				this.vk.api.photos.getChatUploadServer(serverParams),
+				this.vk.api.photos.getChatUploadServer(params ?? {}),
 			save: (uploaded) =>
 				this.vk.api.messages.setChatPhoto({
-					file: (uploaded as { response: string }).response,
+					file: uploaded.response,
 				}),
 			requestOptions,
 		});
@@ -259,6 +266,7 @@ export class Upload {
 		return this._conduct({
 			file,
 			fieldName: "file",
+			attachmentType: "photo",
 			getServer: () =>
 				this.vk.api.photos.getMarketAlbumUploadServer({
 					group_id: group_id!,
@@ -266,11 +274,7 @@ export class Upload {
 			save: (uploaded) =>
 				this.vk.api.photos.saveMarketAlbumPhoto({
 					group_id: group_id!,
-					...(uploaded as {
-						photo: string;
-						server: number;
-						hash: string;
-					}),
+					...uploaded,
 				}),
 			requestOptions,
 		});
@@ -287,12 +291,13 @@ export class Upload {
 		return this._conduct({
 			file,
 			fieldName: "file",
+			attachmentType: "doc",
 			getServer: () =>
 				this.vk.api.docs.getUploadServer({ group_id }),
 			save: (uploaded) =>
 				this.vk.api.docs.save({
 					...saveParams,
-					file: uploaded.file as string,
+					file: uploaded.file,
 				}),
 			requestOptions,
 		});
@@ -309,12 +314,13 @@ export class Upload {
 		return this._conduct({
 			file,
 			fieldName: "file",
+			attachmentType: "doc",
 			getServer: () =>
 				this.vk.api.docs.getMessagesUploadServer({ peer_id: peer_id!, type }),
 			save: (uploaded) =>
 				this.vk.api.docs.save({
 					...saveParams,
-					file: uploaded.file as string,
+					file: uploaded.file,
 				}),
 			requestOptions,
 		});
@@ -331,12 +337,13 @@ export class Upload {
 		return this._conduct({
 			file,
 			fieldName: "file",
+			attachmentType: "doc",
 			getServer: () =>
 				this.vk.api.docs.getWallUploadServer({ group_id }),
 			save: (uploaded) =>
 				this.vk.api.docs.save({
 					...saveParams,
-					file: uploaded.file as string,
+					file: uploaded.file,
 				}),
 			requestOptions,
 		});
@@ -348,12 +355,12 @@ export class Upload {
 		params: MarketGetProductPhotoUploadServerParams,
 		requestOptions?: RequestOptions,
 	): Promise<MarketPhotoIdResponse> {
-		const { ...serverParams } = params;
 		return this._conduct({
 			file,
 			fieldName: "file",
+			attachmentType: "photo",
 			getServer: () =>
-				this.vk.api.market.getProductPhotoUploadServer(serverParams),
+				this.vk.api.market.getProductPhotoUploadServer(params),
 			save: (uploaded) =>
 				this.vk.api.market.saveProductPhoto({
 					upload_response: JSON.stringify(uploaded),
@@ -368,12 +375,11 @@ export class Upload {
 		params?: StoriesGetPhotoUploadServerParams,
 		requestOptions?: RequestOptions,
 	): Promise<Record<string, unknown>> {
-		const { ...serverParams } = params ?? {};
 		return this._conduct({
 			file,
 			fieldName: "file",
 			getServer: () =>
-				this.vk.api.stories.getPhotoUploadServer(serverParams),
+				this.vk.api.stories.getPhotoUploadServer(params ?? {}),
 			requestOptions,
 		});
 	}
@@ -384,12 +390,11 @@ export class Upload {
 		params?: StoriesGetVideoUploadServerParams,
 		requestOptions?: RequestOptions,
 	): Promise<Record<string, unknown>> {
-		const { ...serverParams } = params ?? {};
 		return this._conduct({
 			file,
 			fieldName: "video_file",
 			getServer: () =>
-				this.vk.api.stories.getVideoUploadServer(serverParams),
+				this.vk.api.stories.getVideoUploadServer(params ?? {}),
 			requestOptions,
 		});
 	}

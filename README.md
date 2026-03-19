@@ -13,7 +13,7 @@ Simple and tiny code-generated **VK API** wrapper for TypeScript/JavaScript with
 - **Multi-runtime** — Works on [Node.js](https://nodejs.org/), [Bun](https://bun.sh/) and [Deno](https://deno.com/)
 - **Code-generated** — [Code-generated and auto-published VK API types](https://github.com/vkraft/types) via `@vkraft/types`
 - **Type-safe** — Written in TypeScript with full type safety
-- **Tiny** — Without middlewares it's just `fetch` + `JSON.stringify` — zero overhead
+- **Tiny** — Without middlewares it's just `fetch` + `URLSearchParams` — zero overhead
 
 ### Installation
 

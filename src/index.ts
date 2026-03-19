@@ -61,7 +61,7 @@ export interface VKOptions {
  * Use {@link VK.api | api} to call VK API methods via two-level proxy (`vk.api.users.get(...)`).
  * Pass middlewares via {@link VKOptions.middlewares | options.middlewares}.
  *
- * Without middlewares it's just `fetch` + `JSON.stringify` — zero overhead.
+ * Without middlewares it's just `fetch` + `URLSearchParams` — zero overhead.
  *
  * @example
  * ```ts
@@ -206,14 +206,12 @@ export class VK {
 
 				url += `?${new URLSearchParams(queryParams).toString()}`;
 			} else {
-				reqOptions.body = JSON.stringify({
-					...context.params,
-					access_token: this.token,
-					v: this.options.v,
-				});
-				(reqOptions.headers as Headers).set(
-					"Content-Type",
-					"application/json",
+				reqOptions.body = new URLSearchParams(
+					simplifyObject({
+						...context.params,
+						access_token: this.token,
+						v: this.options.v,
+					}),
 				);
 			}
 

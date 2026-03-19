@@ -36,7 +36,7 @@ describe("VK", () => {
 });
 
 describe("api proxy", () => {
-	it("should send POST with JSON body to correct URL", async () => {
+	it("should send POST with URLSearchParams body to correct URL", async () => {
 		mockFetch.mockResolvedValueOnce(
 			mockResponse({ response: [{ id: 1, first_name: "Pavel" }] }),
 		);
@@ -52,16 +52,12 @@ describe("api proxy", () => {
 		const [url, init] = mockFetch.mock.calls[0];
 		expect(url).toBe("https://api.vk.com/method/users.get");
 		expect(init?.method).toBe("POST");
-		expect((init?.headers as Headers).get("Content-Type")).toBe(
-			"application/json",
-		);
 
-		const body = JSON.parse(init?.body as string);
-		expect(body).toEqual({
-			user_ids: [1],
-			access_token: "tok",
-			v: "5.199",
-		});
+		const body = init?.body as URLSearchParams;
+		expect(body).toBeInstanceOf(URLSearchParams);
+		expect(body.get("user_ids")).toBe("[1]");
+		expect(body.get("access_token")).toBe("tok");
+		expect(body.get("v")).toBe("5.199");
 	});
 
 	it("should include access_token and v in body", async () => {
@@ -72,9 +68,9 @@ describe("api proxy", () => {
 		const vk = new VK("my-token", { v: "5.131" });
 		await vk.api.account.getProfileInfo();
 
-		const body = JSON.parse(mockFetch.mock.calls[0][1]?.body as string);
-		expect(body.access_token).toBe("my-token");
-		expect(body.v).toBe("5.131");
+		const body = mockFetch.mock.calls[0][1]?.body as URLSearchParams;
+		expect(body.get("access_token")).toBe("my-token");
+		expect(body.get("v")).toBe("5.131");
 	});
 
 	it("should strip suppress from body", async () => {
@@ -96,8 +92,8 @@ describe("api proxy", () => {
 
 		expect(result).toBeInstanceOf(VKAPIError);
 
-		const body = JSON.parse(mockFetch.mock.calls[0][1]?.body as string);
-		expect(body).not.toHaveProperty("suppress");
+		const body = mockFetch.mock.calls[0][1]?.body as URLSearchParams;
+		expect(body.has("suppress")).toBe(false);
 	});
 
 	it("should cache proxy functions at both levels", () => {
@@ -249,8 +245,8 @@ describe("middlewares", () => {
 		const vk = new VK("tok", { middlewares: [addField] });
 		await vk.api.users.get({ user_ids: [1] });
 
-		const body = JSON.parse(mockFetch.mock.calls[0][1]?.body as string);
-		expect(body.fields).toBe("photo_100");
+		const body = mockFetch.mock.calls[0][1]?.body as URLSearchParams;
+		expect(body.get("fields")).toBe("photo_100");
 	});
 
 	it("should allow middleware to set formData", async () => {
