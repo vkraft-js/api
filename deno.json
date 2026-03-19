@@ -1,11 +1,11 @@
 {
-    "name": "@gramio/wrappergram",
+    "name": "@vkraft/api",
     "version": "0.0.1",
     "exports": "./src/index.ts",
     "publish": {
         "include": ["src", "README.md", "LICENSE"]
     },
     "imports": {
-        "@gramio/types": "jsr:@gramio/types@^8.3.3"
+        "@vkraft/types": "jsr:@vkraft/types@^5.199.0"
     }
 }

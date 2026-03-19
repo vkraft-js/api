@@ -1,9 +1,10 @@
+import type { APIMethods } from "@vkraft/types";
 import type {
-	APIMethodParams,
-	APIMethodReturn,
-	APIMethods,
-} from "@gramio/types";
-import type { TelegramError } from "./errors.ts";
+	CallAPI,
+	CallAPIWithOptionalParams,
+	CallAPIWithoutParams,
+} from "@vkraft/types/utils";
+import type { VKAPIError } from "./errors.ts";
 
 /** Type for maybe {@link Promise} or may not */
 export type MaybePromise<T> = Promise<T> | T;
@@ -13,18 +14,17 @@ export type MaybePromise<T> = Promise<T> | T;
 /**
  * Interface for adding `suppress` param to method params.
  *
- * Pass `true` to return {@link TelegramError} instead of throwing.
+ * Pass `true` to return {@link VKAPIError} instead of throwing.
  *
  * @example
  * ```ts
- * const response = await telegram.api.sendMessage({
+ * const response = await vk.api.users.get({
  *     suppress: true,
- *     chat_id: "@not_found",
- *     text: "Suppressed method"
+ *     user_ids: [1],
  * });
  *
- * if (response instanceof TelegramError) console.error("sendMessage returned an error...");
- * else console.log("Message has been sent successfully");
+ * if (response instanceof VKAPIError) console.error("users.get returned an error...");
+ * else console.log("Users fetched successfully");
  * ```
  */
 export interface Suppress<
@@ -33,20 +33,6 @@ export interface Suppress<
 	suppress?: IsSuppressed;
 }
 
-/** Type that assigns API params with {@link Suppress} */
-export type MaybeSuppressedParams<
-	Method extends keyof APIMethods,
-	IsSuppressed extends boolean | undefined = undefined,
-> = APIMethodParams<Method> & Suppress<IsSuppressed>;
-
-/** Type that returns MaybeSuppressed API method ReturnType */
-export type MaybeSuppressedReturn<
-	Method extends keyof APIMethods,
-	IsSuppressed extends boolean | undefined = undefined,
-> = true extends IsSuppressed
-	? TelegramError<Method> | APIMethodReturn<Method>
-	: APIMethodReturn<Method>;
-
 // === Per-Request Options (second argument) ===
 
 /**
@@ -54,52 +40,67 @@ export type MaybeSuppressedReturn<
  *
  * @example
  * ```ts
- * await telegram.api.sendMessage(
- *     { chat_id: 123, text: "hi" },
+ * await vk.api.users.get(
+ *     { user_ids: [1] },
  *     { signal: AbortSignal.timeout(5000) }
  * );
  * ```
  */
 export type RequestOptions = Omit<RequestInit, "method" | "body">;
 
-// === API Methods Map ===
+// === Wrap Method ===
 
-/** Map of APIMethods with {@link Suppress} and per-request {@link RequestOptions} */
-export type SuppressedAPIMethods<
-	Methods extends keyof APIMethods = keyof APIMethods,
-> = {
-	[APIMethod in Methods]: APIMethodParams<APIMethod> extends undefined
-		? <IsSuppressed extends boolean | undefined = undefined>(
+/**
+ * Wraps a single method signature, adding `suppress` and per-request `RequestOptions`.
+ *
+ * For overloaded methods (callable interfaces), preserves the original signatures as-is
+ * — suppress still works at runtime, just not reflected at the type level for overloads.
+ */
+type WrapMethod<M, S extends boolean | undefined = undefined> =
+	M extends CallAPIWithoutParams<infer R>
+		? <IsSuppressed extends boolean | undefined = S>(
 				params?: Suppress<IsSuppressed>,
 				requestOptions?: RequestOptions,
-			) => Promise<MaybeSuppressedReturn<APIMethod, IsSuppressed>>
-		: undefined extends APIMethodParams<APIMethod>
-			? <IsSuppressed extends boolean | undefined = undefined>(
-					params?: MaybeSuppressedParams<APIMethod, IsSuppressed>,
+			) => Promise<
+				true extends IsSuppressed ? VKAPIError | R : R
+			>
+		: M extends CallAPIWithOptionalParams<infer P, infer R>
+			? <IsSuppressed extends boolean | undefined = S>(
+					params?: P & Suppress<IsSuppressed>,
 					requestOptions?: RequestOptions,
-				) => Promise<MaybeSuppressedReturn<APIMethod, IsSuppressed>>
-			: <IsSuppressed extends boolean | undefined = undefined>(
-					params: MaybeSuppressedParams<APIMethod, IsSuppressed>,
-					requestOptions?: RequestOptions,
-				) => Promise<MaybeSuppressedReturn<APIMethod, IsSuppressed>>;
+				) => Promise<
+					true extends IsSuppressed ? VKAPIError | R : R
+				>
+			: M extends CallAPI<infer P, infer R>
+				? <IsSuppressed extends boolean | undefined = S>(
+						params: P & Suppress<IsSuppressed>,
+						requestOptions?: RequestOptions,
+					) => Promise<
+						true extends IsSuppressed ? VKAPIError | R : R
+					>
+				: M; // Overloaded methods (callable interfaces) — preserve as-is
+
+// === API Methods Map ===
+
+/** Nested map of APIMethods with {@link Suppress} and per-request {@link RequestOptions} */
+export type SuppressedAPIMethods = {
+	[Cat in keyof APIMethods]: {
+		[Method in keyof APIMethods[Cat]]: WrapMethod<APIMethods[Cat][Method]>
+	}
 };
 
 // === Middleware ===
 
 /** Middleware context — shared mutable state that flows through the middleware chain */
-export type MiddlewareContext<
-	Methods extends keyof APIMethods = keyof APIMethods,
-> = {
-	[M in Methods]: {
-		method: M;
-		params: APIMethodParams<M>;
-		/**
-		 * Set by middleware (e.g. `@gramio/files`) to provide FormData body
-		 * instead of JSON. When set, remaining `params` are sent as URL query string.
-		 */
-		formData?: FormData;
-	};
-}[Methods];
+export interface MiddlewareContext {
+	method: string;
+	params: Record<string, unknown>;
+	/**
+	 * Set by middleware to provide FormData body instead of JSON.
+	 * When set, auth params (`access_token`, `v`) are sent as URL query string.
+	 */
+	formData?: FormData;
+}
 
 /**
  * Middleware function that wraps the API call lifecycle.
@@ -119,9 +120,7 @@ export type MiddlewareContext<
  * };
  * ```
  */
-export type Middleware<
-	Methods extends keyof APIMethods = keyof APIMethods,
-> = (
-	context: MiddlewareContext<Methods>,
+export type Middleware = (
+	context: MiddlewareContext,
 	next: () => Promise<unknown>,
 ) => Promise<unknown>;

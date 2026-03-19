@@ -1,20 +1,17 @@
 {
-	"name": "wrappergram",
-	"version": "2.0.0",
+	"name": "@vkraft/api",
+	"version": "0.1.0",
 	"main": "./dist/index.cjs",
-	"description": "Simple and tiny Telegram Bot API wrapper with middleware hooks and opt-in file/format support",
+	"description": "Simple and tiny VK API wrapper with middleware hooks, type safety, and file upload support",
 	"keywords": [
-		"telegram",
-		"telegram-bot",
-		"telegram-bot-api",
-		"bot",
-		"framework",
-		"library",
+		"vk",
+		"vkontakte",
+		"vk-api",
 		"wrapper",
 		"types",
 		"client",
 		"tiny",
-		"long-polling"
+		"typescript"
 	],
 	"scripts": {
 		"prepublishOnly": "bunx pkgroll"
@@ -41,6 +38,16 @@
 				"types": "./dist/utils.d.ts",
 				"default": "./dist/utils.js"
 			}
+		},
+		"./file": {
+			"require": {
+				"types": "./dist/file.d.cts",
+				"default": "./dist/file.cjs"
+			},
+			"import": {
+				"types": "./dist/file.d.ts",
+				"default": "./dist/file.js"
+			}
 		}
 	},
 	"type": "module",
@@ -51,7 +58,7 @@
 		"typescript": "^5.8.3"
 	},
 	"dependencies": {
-		"@gramio/types": "^9.0.1"
+		"@vkraft/types": "file:../types"
 	},
 	"sideEffects": false,
 	"files": ["dist"],

@@ -1,36 +1,30 @@
-import type {
-	APIMethodParams,
-	APIMethods,
-	TelegramAPIResponseError,
-	TelegramResponseParameters,
-} from "@gramio/types";
+import type { VKError, VKErrorCode } from "@vkraft/types";
 
-/** Represent {@link TelegramAPIResponseError} and thrown in API calls */
-export class TelegramError<T extends keyof APIMethods> extends Error {
-	/** Name of the API Method */
-	method: T;
+/** Represent {@link VKError} and thrown in API calls */
+export class VKAPIError extends Error {
+	/** Name of the API method (e.g. `"users.get"`) */
+	method: string;
 	/** Params that were sent */
-	params: APIMethodParams<T>;
-	/** See {@link TelegramAPIResponseError.error_code} */
-	code: number;
-	/** Describes why a request was unsuccessful. */
-	payload?: TelegramResponseParameters;
+	params: unknown;
+	/** See {@link VKErrorCode} */
+	code: VKErrorCode;
+	/** Original request params returned by VK */
+	requestParams: { key: string; value: string }[];
 
-	/** Construct new TelegramError */
+	/** Construct new VKAPIError */
 	constructor(
-		error: TelegramAPIResponseError,
-		method: T,
-		params: APIMethodParams<T>,
+		error: VKError,
+		method: string,
+		params: unknown,
 		callSite?: Error,
 	) {
-		super(error.description);
+		super(error.error_msg);
 
 		this.name = method;
 		this.method = method;
 		this.params = params;
 		this.code = error.error_code;
-
-		if (error.parameters) this.payload = error.parameters;
+		this.requestParams = error.request_params;
 
 		// Restore stack trace from the original call site
 		if (callSite?.stack) {

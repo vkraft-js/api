@@ -1,20 +1,30 @@
-import {  bench, group, run } from "mitata";
+import { bench, group, run } from "mitata";
 
-function callAPI(method: any, args: number) {
+function callAPI(method: string, args: number) {
 	return args;
 }
 
-const cachedAPI = new Proxy({} as Record<"test", (num: number) => number>, {
-	get: (target, method) => target[method] ??= ((args) => callAPI(method, args)),
+// Two-level proxy (cached)
+const cachedAPI = new Proxy({} as Record<string, Record<string, (num: number) => number>>, {
+	get: (target, category: string) =>
+		target[category] ??= new Proxy({} as Record<string, (num: number) => number>, {
+			get: (catTarget, method: string) =>
+				catTarget[method] ??= ((args) => callAPI(`${category}.${method}`, args)),
+		}),
 });
 
-const api = new Proxy({} as Record<"test", (num: number) => number>, {
-	get: (target, method) => (args) => callAPI(method, args),
+// Two-level proxy (non-cached)
+const api = new Proxy({} as Record<string, Record<string, (num: number) => number>>, {
+	get: (_target, category: string) =>
+		new Proxy({} as Record<string, (num: number) => number>, {
+			get: (_catTarget, method: string) =>
+				(args: number) => callAPI(`${category}.${method}`, args),
+		}),
 });
 
-group("new Proxy", () => {
-	bench("cached", () => cachedAPI.test(2));
-	bench("non-cached", () => api.test(2));
+group("two-level Proxy", () => {
+	bench("cached", () => cachedAPI.users.get(2));
+	bench("non-cached", () => api.users.get(2));
 });
 
 await run();

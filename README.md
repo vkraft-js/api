@@ -1,113 +1,171 @@
-# wrappergram
+# @vkraft/api
 
 <div align="center">
 
-[![Bot API](https://img.shields.io/badge/Bot%20API-7.7+-blue?logo=telegram&style=flat&labelColor=000&color=3b82f6)](https://core.telegram.org/bots/api)
-[![npm](https://img.shields.io/npm/v/wrappergram?logo=npm&style=flat&labelColor=000&color=3b82f6)](https://www.npmjs.org/package/wrappergram)
-[![npm downloads](https://img.shields.io/npm/dw/wrappergram?logo=npm&style=flat&labelColor=000&color=3b82f6)](https://www.npmjs.org/package/wrappergram)
-[![JSR](https://jsr.io/badges/@gramio/wrappergram)](https://jsr.io/@gramio/wrappergram)
-[![JSR Score](https://jsr.io/badges/@gramio/wrappergram/score)](https://jsr.io/@gramio/wrappergram)
-[![bundlejs](<https://deno.bundlejs.com/badge?q=wrappergram&treeshake=[*]&text=%22const+telegram+=+new+Telegram(process.env.BOT_TOKEN+as+string);\n\ntelegram.api.sendMessage({\n++++chat_id:+617580375,\n++++text:+%22Hello!%22,\n});%22>)](https://bundlejs.com/?q=wrappergram&treeshake=%5B*%5D&text=%22const+telegram+%3D+new+Telegram%28process.env.BOT_TOKEN+as+string%29%3B%5Cn%5Cntelegram.api.sendMessage%28%7B%5Cn++++chat_id%3A+617580375%2C%5Cn++++text%3A+%5C%22Hello%21%5C%22%2C%5Cn%7D%29%3B%22)
+[![VK API](https://img.shields.io/badge/VK%20API-5.199-blue?style=flat&labelColor=000&color=3b82f6)](https://dev.vk.com/reference)
+[![npm](https://img.shields.io/npm/v/@vkraft/api?logo=npm&style=flat&labelColor=000&color=3b82f6)](https://www.npmjs.org/package/@vkraft/api)
+[![JSR](https://jsr.io/badges/@vkraft/api)](https://jsr.io/@vkraft/api)
 
 </div>
 
-Simple and tiny code-generated **Telegram Bot API** wrapper for TypeScript/JavaScript with [file upload](https://core.telegram.org/bots/api#sending-files) support.
+Simple and tiny code-generated **VK API** wrapper for TypeScript/JavaScript with [file upload](#file-upload) support.
 
-🌐 **Multi-runtime** - Works on [Node.js](https://nodejs.org/), [Bun](https://bun.sh/) and [Deno](https://deno.com/)
+- **Multi-runtime** — Works on [Node.js](https://nodejs.org/), [Bun](https://bun.sh/) and [Deno](https://deno.com/)
+- **Code-generated** — [Code-generated and auto-published VK API types](https://github.com/vkraft/types) via `@vkraft/types`
+- **Type-safe** — Written in TypeScript with full type safety
+- **Tiny** — Without middlewares it's just `fetch` + `JSON.stringify` — zero overhead
 
-⚙️ **Code-generated** - For example, [code-generated and auto-published Telegram Bot API types](https://github.com/gramiojs/types))
+### Installation
 
-🛡️ **Type-safe** - Written in TypeScript with love ❤️
+```bash
+# npm / pnpm / yarn
+npm install @vkraft/api
 
-🤏 **Tiny** - Simple `sendMessage` call cost some [![bundlejs](https://edge.bundlejs.com/?text=import%20%7B%20Telegram%20%7D%20from%20%22wrappergram%22%3B%0A%0Aconst%20telegram%20%3D%20new%20Telegram%28process.env.BOT_TOKEN%29%3B%0A%0Atelegram.api.sendMessage%28%7B%0A%20%20%20%20chat_id%3A%20617580375%2C%0A%20%20%20%20text%3A%20%22Hello%21%22%2C%0A%7D%29%3B&badge)](https://bundlejs.com/?q=wrappergram&treeshake=%5B*%5D&text=%22const+telegram+%3D+new+Telegram%28process.env.BOT_TOKEN+as+string%29%3B%5Cn%5Cntelegram.api.sendMessage%28%7B%5Cn++++chat_id%3A+617580375%2C%5Cn++++text%3A+%5C%22Hello%21%5C%22%2C%5Cn%7D%29%3B%22) in bundle size. So it is a good choice for browser/serverless environments
+# Bun
+bun add @vkraft/api
 
-But if you need a more complete framework, then please look to [`GramIO`](https://gramio.dev/).
+# Deno
+deno add jsr:@vkraft/api
+```
 
 ### Usage
 
 ```ts
-import { Telegram, getUpdates } from "wrappergram";
+import { VK } from "@vkraft/api";
 
-const telegram = new Telegram(process.env.BOT_TOKEN as string);
+const vk = new VK(process.env.VK_TOKEN as string);
 
-telegram.api.sendMessage({
-    chat_id: 617580375,
-    text: "Hello!",
+const users = await vk.api.users.get({
+    user_ids: [1],
 });
 
-for await (const update of getUpdates(telegram)) {
-    console.log(update);
+console.log(users); // [{ id: 1, first_name: "Pavel", last_name: "Durov" }]
+```
 
-    if (update.message?.from) {
-        telegram.api.sendMessage({
-            chat_id: update.message.from.id,
-            text: "Hi! Thanks for the message",
-        });
+### Call API
+
+You can send requests to VK API methods via `vk.api` with full type-safety — two-level proxy maps `vk.api.{category}.{method}(params)` to the VK API method.
+
+```ts
+const users = await vk.api.users.get({
+    user_ids: [1, 2, 3],
+});
+
+await vk.api.wall.post({
+    message: "Hello, world!",
+});
+
+const friends = await vk.api.friends.get({
+    user_id: 1,
+    count: 5,
+});
+```
+
+### Error handling
+
+By default, API errors throw a `VKAPIError`. Use `suppress: true` to return it instead:
+
+```ts
+import { VK, VKAPIError } from "@vkraft/api";
+
+const vk = new VK("ACCESS_TOKEN");
+
+// Throws VKAPIError on failure
+try {
+    await vk.api.wall.post({ message: "Hello!" });
+} catch (err) {
+    if (err instanceof VKAPIError) {
+        console.error(err.code, err.message, err.requestParams);
     }
+}
+
+// Returns VKAPIError instead of throwing
+const result = await vk.api.wall.post({
+    suppress: true,
+    message: "Hello!",
+});
+
+if (result instanceof VKAPIError) {
+    console.error("Failed:", result.message);
+} else {
+    console.log("Post ID:", result.post_id);
 }
 ```
 
-This example on bundlejs cost [![bundlejs](https://deno.bundlejs.com/badge?q=wrappergram&treeshake=[*]&share=MYewdgzgLgBFCmAbeBzATgQwLYwLwzHgHcYAVJVTLACgAc0Rh4IIA6eMAN1YCEB5UgH1SfANIBRAHIBKANwAoeQmTpsrDLQCWrCBwAmAWWYQMKeNQDe8mDZjAAFhiiDNegFwwAbAEYA7AFYADgAGAGYAgBprWwQADygPACIACSREEABCRKiAXzlFADMQNBgMIgxNWGpQSFgAV1o9J3gYEAKYMygAVUbmiGplSmxpaRgrWztwCBBkVnSUagamhHzom012xd6EVixjU3gAflYChixR8YmYilUsdS0dfSMWA8s1q4mHJxd3GCXm3b7MwnM6sVxRD4fOIJGApTQZMiOMAAawgMCKJSg9haexeZmy7wmeQURPkOSAA)](https://bundlejs.com/?q=wrappergram&treeshake=%5B*%5D&share=MYewdgzgLgBFCmAbeBzATgQwLYwLwzHgHcYAVJVTLACgAc0Rh4IIA6eMAN1YCEB5UgH1SfANIBRAHIBKANwAoeQmTpsrDLQCWrCBwAmAWWYQMKeNQDe8mDZjAAFhiiDNegFwwAbAEYA7AFYADgAGAGYAgBprWwQADygPACIACSREEABCRKiAXzlFADMQNBgMIgxNWGpQSFgAV1o9J3gYEAKYMygAVUbmiGplSmxpaRgrWztwCBBkVnSUagamhHzom012xd6EVixjU3gAflYChixR8YmYilUsdS0dfSMWA8s1q4mHJxd3GCXm3b7MwnM6sVxRD4fOIJGApTQZMiOMAAawgMCKJSg9haexeZmy7wmeQURPkOSAA)
+### Per-request options
 
-> [!IMPORTANT]
-> Use `getUpdates` only **once** in your code otherwise it will cause double calls to [getUpdates](https://core.telegram.org/bots/api#getupdates)
-
-### Call api
-
-You can send requests to Telegram Bot API Methods via `telegram.api` with full type-safety!
+Pass fetch options as the second argument:
 
 ```ts
-const response = await telegram.api.sendMessage({
-    chat_id: "@gramio_forum",
-    text: "Hello, world!",
-});
-
-if (!response.ok) console.error("Something went wrong");
-else console.log(`New message id is ${response.result.message_id}`);
+await vk.api.users.get(
+    { user_ids: [1] },
+    { signal: AbortSignal.timeout(5000) },
+);
 ```
 
-### Send keyboards
+### Middleware
 
-For keyboards you need to install [`@gramio/keyboard`](https://www.npmjs.com/package/@gramio/keyboards) library and just use it!
+Middlewares wrap every API call — mutate params, handle responses, or catch errors:
 
 ```ts
-import { Keyboard } from "@gramio/keyboards";
+import { VK } from "@vkraft/api";
+import type { Middleware } from "@vkraft/api";
 
-// telegram init
-telegram.api.sendMessage({
-    chat_id: "@gramio_forum",
-    text: "Hello, world!",
-    reply_markup: new InlineKeyboard().url(
-        "GitHub",
-        "https://github.com/gramiojs/wrappergram"
-    ),
+const logger: Middleware = async (context, next) => {
+    console.log(`-> ${context.method}`, context.params);
+    const result = await next();
+    console.log(`<- ${context.method}`);
+    return result;
+};
+
+const vk = new VK("ACCESS_TOKEN", {
+    middlewares: [logger],
 });
 ```
 
-This example cost - [![bundlejs](<https://deno.bundlejs.com/badge?q=wrappergram,@gramio/keyboards&treeshake=[*],[*]&text=%22const+telegram+=+new+Telegram(process.env.BOT_TOKEN);\n\ntelegram.api.sendMessage({\n++chat_id:+617580375,\n++text:+%22Hello!%22,\n++reply_markup:+new+InlineKeyboard().url(%22GitHub%22,+%22https://github.com/gramiojs/wrappergram%22)\n});%22>)](https://bundlejs.com/?q=wrappergram%2C%40gramio%2Fkeyboards&treeshake=%5B*%5D%2C%5B*%5D&text=%22const+telegram+%3D+new+Telegram%28process.env.BOT_TOKEN%29%3B%5Cn%5Cntelegram.api.sendMessage%28%7B%5Cn++chat_id%3A+617580375%2C%5Cn++text%3A+%5C%22Hello%21%5C%22%2C%5Cn++reply_markup%3A+new+InlineKeyboard%28%29.url%28%5C%22GitHub%5C%22%2C+%5C%22https%3A%2F%2Fgithub.com%2Fgramiojs%2Fwrappergram%5C%22%29%5Cn%7D%29%3B%22)
+### File upload
 
-[Read more here](https://gramio.dev/keyboards/overview)
-
-### Send files
-
-[`@gramio/files`](https://gramio.dev/files/overview) already used under the hood so you don't need to install it
+VK file uploads follow a 3-step process. The `upload` helper and `MediaInput` factory simplify step 2:
 
 ```ts
-import { MediaUpload } from "wrappergram";
+import { VK } from "@vkraft/api";
+import { upload, MediaInput } from "@vkraft/api/file";
 
-telegram.api.sendPhoto({
-    chat_id: "@gramio_forum",
-    text: "Hello, world!",
-    photo: MediaUpload.path("./cute-cat.png"),
+const vk = new VK("ACCESS_TOKEN");
+
+// Step 1: Get upload URL
+const server = await vk.api.photos.getMessagesUploadServer({
+    peer_id: 123,
 });
 
-telegram.api.sendDocument({
-    chat_id: "@gramio_forum",
-    text: "Hello, world!",
-    photo: Bun.file("README.md"), // you can use File instance to upload files
+// Step 2: Upload file
+const file = await MediaInput.path("./photo.jpg");
+const uploaded = await upload(server.upload_url, "photo", file);
+
+// Step 3: Save
+const saved = await vk.api.photos.saveMessagesPhoto({
+    photo: uploaded.photo as string,
+    server: uploaded.server as number,
+    hash: uploaded.hash as string,
 });
 ```
 
-This example cost - [![bundlejs](<https://deno.bundlejs.com/badge?q=wrappergram&text=%22const+telegram+=+new+Telegram(process.env.BOT_TOKEN);+\n\ntelegram.api.sendPhoto({+\n++chat_id:+%22@gramio_forum%22,+\n++text:+%22Hello,+world!%22,+\n++photo:+MediaUpload.path(%22./cute-cat.png%22),+\n});%22>)](https://bundlejs.com/?q=wrappergram&treeshake=%5B*%5D&text=%22const+telegram+%3D+new+Telegram%28process.env.BOT_TOKEN%29%3B+%5Cn%5Cntelegram.api.sendPhoto%28%7B+%5Cn++chat_id%3A+%5C%22%40gramio_forum%5C%22%2C+%5Cn++text%3A+%5C%22Hello%2C+world%21%5C%22%2C+%5Cn++photo%3A+MediaUpload.path%28%5C%22.%2Fcute-cat.png%5C%22%29%2C+%5Cn%7D%29%3B%22)
+### Retry on rate limit
 
-[Read more here](https://gramio.dev/files/overview)
+Use `withRetries` to automatically retry on VK error code 6 (Too many requests per second):
+
+```ts
+import { VK } from "@vkraft/api";
+import { withRetries } from "@vkraft/api/utils";
+
+const vk = new VK("ACCESS_TOKEN");
+
+const result = await withRetries(
+    () => vk.api.users.get({ user_ids: [1] }),
+    { delay: 350, maxRetries: 3 },
+);
+```
+
+---
+
+Architectural reference: [wrappergram](https://github.com/gramiojs/wrappergram) from the [GramIO](https://gramio.dev/) ecosystem.

@@ -1,105 +1,72 @@
 import { describe, it, expectTypeOf } from "bun:test";
-import { Telegram, TelegramError } from "../src/index.ts";
+import { VK, VKAPIError } from "../src/index.ts";
 import type {
 	Middleware,
 	MiddlewareContext,
-	MaybeSuppressedReturn,
-	MaybeSuppressedParams,
 	RequestOptions,
 	Suppress,
 	SuppressedAPIMethods,
 } from "../src/types.ts";
-import type { TelegramMessage, TelegramUser } from "@gramio/types";
+import type {
+	VKErrorCode,
+	UsersGetResponse,
+	BaseOkResponse,
+} from "@vkraft/types";
 
-const t = new Telegram("tok");
+const vk = new VK("tok");
 
-describe("Telegram class types", () => {
+describe("VK class types", () => {
 	it("token is string", () => {
-		expectTypeOf(t.token).toBeString();
+		expectTypeOf(vk.token).toBeString();
 	});
 
-	it("options has baseURL as string", () => {
-		expectTypeOf(t.options.baseURL).toBeString();
+	it("options has baseURL and v as string", () => {
+		expectTypeOf(vk.options.baseURL).toBeString();
+		expectTypeOf(vk.options.v).toBeString();
 	});
 
 	it("api is SuppressedAPIMethods", () => {
-		expectTypeOf(t.api).toEqualTypeOf<SuppressedAPIMethods>();
+		expectTypeOf(vk.api).toEqualTypeOf<SuppressedAPIMethods>();
 	});
 });
 
 describe("api return types", () => {
-	it("sendMessage returns Promise<TelegramMessage>", () => {
-		expectTypeOf(t.api.sendMessage({ chat_id: 1, text: "hi" })).resolves.toEqualTypeOf<TelegramMessage>();
-	});
-
-	it("getMe returns Promise<TelegramUser>", () => {
-		expectTypeOf(t.api.getMe()).resolves.toEqualTypeOf<TelegramUser>();
-	});
-
-	it("deleteMessage returns Promise<true>", () => {
+	it("users.get returns Promise<UsersGetResponse>", () => {
 		expectTypeOf(
-			t.api.deleteMessage({ chat_id: 1, message_id: 1 }),
-		).resolves.toEqualTypeOf<true>();
+			vk.api.users.get({ user_ids: [1] }),
+		).resolves.toEqualTypeOf<UsersGetResponse>();
+	});
+
+	it("account.ban returns Promise<BaseOkResponse>", () => {
+		expectTypeOf(
+			vk.api.account.ban({ owner_id: 1 }),
+		).resolves.toEqualTypeOf<BaseOkResponse>();
 	});
 });
 
 describe("suppress types", () => {
-	it("suppress: true returns TelegramError | Result", () => {
+	it("suppress: true returns VKAPIError | Result", () => {
 		expectTypeOf(
-			t.api.sendMessage({ suppress: true, chat_id: 1, text: "hi" }),
-		).resolves.toEqualTypeOf<TelegramError<"sendMessage"> | TelegramMessage>();
+			vk.api.users.get({ suppress: true, user_ids: [1] }),
+		).resolves.toEqualTypeOf<VKAPIError | UsersGetResponse>();
 	});
 
 	it("suppress: undefined returns just Result", () => {
 		expectTypeOf(
-			t.api.sendMessage({ suppress: undefined, chat_id: 1, text: "hi" }),
-		).resolves.toEqualTypeOf<TelegramMessage>();
+			vk.api.users.get({ suppress: undefined, user_ids: [1] }),
+		).resolves.toEqualTypeOf<UsersGetResponse>();
 	});
 
 	it("no suppress returns just Result", () => {
 		expectTypeOf(
-			t.api.sendMessage({ chat_id: 1, text: "hi" }),
-		).resolves.toEqualTypeOf<TelegramMessage>();
+			vk.api.users.get({ user_ids: [1] }),
+		).resolves.toEqualTypeOf<UsersGetResponse>();
 	});
 
-	it("getMe with suppress returns TelegramError | TelegramUser", () => {
+	it("account.ban with suppress returns VKAPIError | BaseOkResponse", () => {
 		expectTypeOf(
-			t.api.getMe({ suppress: true }),
-		).resolves.toEqualTypeOf<TelegramError<"getMe"> | TelegramUser>();
-	});
-});
-
-describe("MaybeSuppressedReturn", () => {
-	it("true returns union", () => {
-		expectTypeOf<
-			MaybeSuppressedReturn<"sendMessage", true>
-		>().toEqualTypeOf<TelegramError<"sendMessage"> | TelegramMessage>();
-	});
-
-	it("undefined returns just Result", () => {
-		expectTypeOf<
-			MaybeSuppressedReturn<"sendMessage", undefined>
-		>().toEqualTypeOf<TelegramMessage>();
-	});
-
-	it("false returns just Result", () => {
-		expectTypeOf<
-			MaybeSuppressedReturn<"sendMessage", false>
-		>().toEqualTypeOf<TelegramMessage>();
-	});
-});
-
-describe("MaybeSuppressedParams", () => {
-	it("includes suppress field", () => {
-		expectTypeOf<
-			MaybeSuppressedParams<"sendMessage", true>
-		>().toMatchObjectType<{ suppress?: true }>();
-	});
-
-	it("includes API params", () => {
-		expectTypeOf<
-			MaybeSuppressedParams<"sendMessage">
-		>().toMatchObjectType<{ chat_id: number | string; text: string }>();
+			vk.api.account.ban({ suppress: true }),
+		).resolves.toEqualTypeOf<VKAPIError | BaseOkResponse>();
 	});
 });
 
@@ -127,11 +94,10 @@ describe("RequestOptions (second argument)", () => {
 	});
 
 	it("api method accepts second argument", () => {
-		// Should compile without error
-		expectTypeOf(t.api.sendMessage).toBeFunction();
+		expectTypeOf(vk.api.users.get).toBeFunction();
 		expectTypeOf(
-			t.api.sendMessage({ chat_id: 1, text: "hi" }, { signal: AbortSignal.timeout(5000) }),
-		).resolves.toEqualTypeOf<TelegramMessage>();
+			vk.api.users.get({ user_ids: [1] }, { signal: AbortSignal.timeout(5000) }),
+		).resolves.toEqualTypeOf<UsersGetResponse>();
 	});
 });
 
@@ -155,7 +121,7 @@ describe("MiddlewareContext", () => {
 	it("has method and params fields", () => {
 		expectTypeOf<MiddlewareContext>().toMatchObjectType<{
 			method: string;
-			params: unknown;
+			params: Record<string, unknown>;
 		}>();
 	});
 
@@ -166,39 +132,58 @@ describe("MiddlewareContext", () => {
 	});
 });
 
-describe("TelegramError types", () => {
+describe("VKAPIError types", () => {
 	it("extends Error", () => {
-		expectTypeOf<TelegramError<"sendMessage">>().toMatchObjectType<Error>();
+		expectTypeOf<VKAPIError>().toMatchObjectType<Error>();
 	});
 
-	it("has method field matching generic", () => {
-		expectTypeOf<TelegramError<"sendMessage">>().toMatchObjectType<{
-			method: "sendMessage";
+	it("has method field as string", () => {
+		expectTypeOf<VKAPIError>().toMatchObjectType<{
+			method: string;
 		}>();
 	});
 
-	it("has code as number", () => {
-		expectTypeOf<TelegramError<"sendMessage">>().toMatchObjectType<{
-			code: number;
+	it("has code as VKErrorCode", () => {
+		expectTypeOf<VKAPIError>().toMatchObjectType<{
+			code: VKErrorCode;
 		}>();
 	});
 
 	it("has message as string", () => {
-		expectTypeOf<TelegramError<"sendMessage">>().toMatchObjectType<{
+		expectTypeOf<VKAPIError>().toMatchObjectType<{
 			message: string;
+		}>();
+	});
+
+	it("has requestParams array", () => {
+		expectTypeOf<VKAPIError>().toMatchObjectType<{
+			requestParams: { key: string; value: string }[];
 		}>();
 	});
 });
 
-describe("TelegramOptions types", () => {
+describe("VKOptions types", () => {
 	it("constructor accepts options with middlewares", () => {
 		const mw: Middleware = async (_ctx, next) => next();
-		// Should compile
-		const _t = new Telegram("tok", {
-			baseURL: "http://localhost/bot",
+		const _vk = new VK("tok", {
+			baseURL: "http://localhost/method/",
+			v: "5.131",
 			fetchOptions: { headers: { "X-Custom": "yes" } },
 			middlewares: [mw],
 		});
-		expectTypeOf(_t).toEqualTypeOf<Telegram>();
+		expectTypeOf(_vk).toEqualTypeOf<VK>();
+	});
+});
+
+describe("nested api access", () => {
+	it("api has category namespaces", () => {
+		expectTypeOf(vk.api.users).toBeObject();
+		expectTypeOf(vk.api.wall).toBeObject();
+		expectTypeOf(vk.api.friends).toBeObject();
+	});
+
+	it("categories have methods", () => {
+		expectTypeOf(vk.api.users.get).toBeFunction();
+		expectTypeOf(vk.api.account.ban).toBeFunction();
 	});
 });

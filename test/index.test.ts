@@ -1,5 +1,5 @@
 import { describe, it, expect, mock, beforeEach } from "bun:test";
-import { Telegram, TelegramError, withRetries } from "../src/index.ts";
+import { VK, VKAPIError, withRetries } from "../src/index.ts";
 import type { Middleware } from "../src/types.ts";
 
 // Mock fetch globally
@@ -17,139 +17,156 @@ beforeEach(() => {
 	mockFetch.mockReset();
 });
 
-describe("Telegram", () => {
+describe("VK", () => {
 	it("should store token and default options", () => {
-		const t = new Telegram("test-token");
-		expect(t.token).toBe("test-token");
-		expect(t.options.baseURL).toBe("https://api.telegram.org/bot");
+		const vk = new VK("test-token");
+		expect(vk.token).toBe("test-token");
+		expect(vk.options.baseURL).toBe("https://api.vk.com/method/");
+		expect(vk.options.v).toBe("5.199");
 	});
 
-	it("should accept custom baseURL", () => {
-		const t = new Telegram("tok", { baseURL: "http://localhost:8081/bot" });
-		expect(t.options.baseURL).toBe("http://localhost:8081/bot");
+	it("should accept custom baseURL and v", () => {
+		const vk = new VK("tok", {
+			baseURL: "http://localhost:8081/method/",
+			v: "5.131",
+		});
+		expect(vk.options.baseURL).toBe("http://localhost:8081/method/");
+		expect(vk.options.v).toBe("5.131");
 	});
 });
 
 describe("api proxy", () => {
-	it("should send POST with JSON body", async () => {
+	it("should send POST with JSON body to correct URL", async () => {
 		mockFetch.mockResolvedValueOnce(
-			mockResponse({ ok: true, result: { message_id: 1 } }),
+			mockResponse({ response: [{ id: 1, first_name: "Pavel" }] }),
 		);
 
-		const t = new Telegram("tok");
-		const result = await t.api.sendMessage({
-			chat_id: 123,
-			text: "hello",
+		const vk = new VK("tok");
+		const result = await vk.api.users.get({
+			user_ids: [1],
 		});
 
-		expect(result).toEqual({ message_id: 1 });
+		expect(result).toEqual([{ id: 1, first_name: "Pavel" }]);
 		expect(mockFetch).toHaveBeenCalledTimes(1);
 
 		const [url, init] = mockFetch.mock.calls[0];
-		expect(url).toBe("https://api.telegram.org/bottok/sendMessage");
+		expect(url).toBe("https://api.vk.com/method/users.get");
 		expect(init?.method).toBe("POST");
 		expect((init?.headers as Headers).get("Content-Type")).toBe(
 			"application/json",
 		);
 
 		const body = JSON.parse(init?.body as string);
-		expect(body).toEqual({ chat_id: 123, text: "hello" });
+		expect(body).toEqual({
+			user_ids: [1],
+			access_token: "tok",
+			v: "5.199",
+		});
+	});
+
+	it("should include access_token and v in body", async () => {
+		mockFetch.mockResolvedValueOnce(
+			mockResponse({ response: { id: 1 } }),
+		);
+
+		const vk = new VK("my-token", { v: "5.131" });
+		await vk.api.account.getProfileInfo();
+
+		const body = JSON.parse(mockFetch.mock.calls[0][1]?.body as string);
+		expect(body.access_token).toBe("my-token");
+		expect(body.v).toBe("5.131");
 	});
 
 	it("should strip suppress from body", async () => {
 		mockFetch.mockResolvedValueOnce(
 			mockResponse({
-				ok: false,
-				error_code: 400,
-				description: "Bad Request",
+				error: {
+					error_code: 5,
+					error_msg: "User authorization failed",
+					request_params: [],
+				},
 			}),
 		);
 
-		const t = new Telegram("tok");
-		const result = await t.api.sendMessage({
+		const vk = new VK("tok");
+		const result = await vk.api.users.get({
 			suppress: true,
-			chat_id: 0,
-			text: "",
+			user_ids: [1],
 		});
 
-		expect(result).toBeInstanceOf(TelegramError);
+		expect(result).toBeInstanceOf(VKAPIError);
 
 		const body = JSON.parse(mockFetch.mock.calls[0][1]?.body as string);
 		expect(body).not.toHaveProperty("suppress");
 	});
 
-	it("should cache proxy functions", () => {
-		const t = new Telegram("tok");
-		const fn1 = t.api.sendMessage;
-		const fn2 = t.api.sendMessage;
-		expect(fn1).toBe(fn2);
+	it("should cache proxy functions at both levels", () => {
+		const vk = new VK("tok");
+		// Category level
+		const users1 = vk.api.users;
+		const users2 = vk.api.users;
+		expect(users1).toBe(users2);
+
+		// Method level
+		const get1 = vk.api.users.get;
+		const get2 = vk.api.users.get;
+		expect(get1).toBe(get2);
 	});
 });
 
-describe("TelegramError", () => {
+describe("VKAPIError", () => {
 	it("should throw on error response by default", async () => {
 		mockFetch.mockResolvedValueOnce(
 			mockResponse({
-				ok: false,
-				error_code: 404,
-				description: "Not Found",
+				error: {
+					error_code: 5,
+					error_msg: "User authorization failed",
+					request_params: [
+						{ key: "method", value: "users.get" },
+						{ key: "oauth", value: "1" },
+					],
+				},
 			}),
 		);
 
-		const t = new Telegram("tok");
+		const vk = new VK("tok");
 
 		try {
-			await t.api.sendMessage({ chat_id: 0, text: "" });
+			await vk.api.users.get({ user_ids: [1] });
 			expect.unreachable("should have thrown");
 		} catch (err) {
-			expect(err).toBeInstanceOf(TelegramError);
-			const te = err as TelegramError<"sendMessage">;
-			expect(te.code).toBe(404);
-			expect(te.message).toBe("Not Found");
-			expect(te.method).toBe("sendMessage");
+			expect(err).toBeInstanceOf(VKAPIError);
+			const ve = err as VKAPIError;
+			expect(ve.code).toBe(5);
+			expect(ve.message).toBe("User authorization failed");
+			expect(ve.method).toBe("users.get");
+			expect(ve.requestParams).toEqual([
+				{ key: "method", value: "users.get" },
+				{ key: "oauth", value: "1" },
+			]);
 		}
 	});
 
 	it("should return error when suppress: true", async () => {
 		mockFetch.mockResolvedValueOnce(
 			mockResponse({
-				ok: false,
-				error_code: 403,
-				description: "Forbidden",
+				error: {
+					error_code: 7,
+					error_msg: "Permission to perform this action is denied",
+					request_params: [],
+				},
 			}),
 		);
 
-		const t = new Telegram("tok");
-		const result = await t.api.sendMessage({
+		const vk = new VK("tok");
+		const result = await vk.api.wall.post({
 			suppress: true,
-			chat_id: 0,
-			text: "",
+			message: "test",
 		});
 
-		expect(result).toBeInstanceOf(TelegramError);
-		if (result instanceof TelegramError) {
-			expect(result.code).toBe(403);
-		}
-	});
-
-	it("should include payload with retry_after", async () => {
-		mockFetch.mockResolvedValueOnce(
-			mockResponse({
-				ok: false,
-				error_code: 429,
-				description: "Too Many Requests",
-				parameters: { retry_after: 30 },
-			}),
-		);
-
-		const t = new Telegram("tok");
-		const result = await t.api.getMe({
-			suppress: true,
-		});
-
-		expect(result).toBeInstanceOf(TelegramError);
-		if (result instanceof TelegramError) {
-			expect(result.payload?.retry_after).toBe(30);
+		expect(result).toBeInstanceOf(VKAPIError);
+		if (result instanceof VKAPIError) {
+			expect(result.code).toBe(7);
 		}
 	});
 });
@@ -157,16 +174,16 @@ describe("TelegramError", () => {
 describe("fetch options", () => {
 	it("should apply global fetchOptions", async () => {
 		mockFetch.mockResolvedValueOnce(
-			mockResponse({ ok: true, result: true }),
+			mockResponse({ response: { id: 1 } }),
 		);
 
-		const t = new Telegram("tok", {
+		const vk = new VK("tok", {
 			fetchOptions: {
 				headers: { "X-Custom": "global" },
 			},
 		});
 
-		await t.api.getMe();
+		await vk.api.account.getProfileInfo();
 
 		const headers = mockFetch.mock.calls[0][1]?.headers as Headers;
 		expect(headers.get("X-Custom")).toBe("global");
@@ -174,16 +191,16 @@ describe("fetch options", () => {
 
 	it("should merge per-request options over global", async () => {
 		mockFetch.mockResolvedValueOnce(
-			mockResponse({ ok: true, result: true }),
+			mockResponse({ response: { id: 1 } }),
 		);
 
-		const t = new Telegram("tok", {
+		const vk = new VK("tok", {
 			fetchOptions: {
 				headers: { "X-Global": "yes" },
 			},
 		});
 
-		await t.api.getMe({}, { headers: { "X-Per-Request": "yes" } });
+		await vk.api.account.getProfileInfo({}, { headers: { "X-Per-Request": "yes" } });
 
 		const headers = mockFetch.mock.calls[0][1]?.headers as Headers;
 		expect(headers.get("X-Global")).toBe("yes");
@@ -210,55 +227,55 @@ describe("middlewares", () => {
 		};
 
 		mockFetch.mockResolvedValueOnce(
-			mockResponse({ ok: true, result: true }),
+			mockResponse({ response: true }),
 		);
 
-		const t = new Telegram("tok", { middlewares: [mw1, mw2] });
-		await t.api.getMe();
+		const vk = new VK("tok", { middlewares: [mw1, mw2] });
+		await vk.api.account.getProfileInfo();
 
 		expect(order).toEqual([1, 2, 3, 4]);
 	});
 
 	it("should allow middleware to mutate params", async () => {
-		const appendText: Middleware = async (ctx, next) => {
-			if (ctx.method === "sendMessage") {
-				(ctx.params as Record<string, unknown>).text += " (modified)";
-			}
+		const addField: Middleware = async (ctx, next) => {
+			ctx.params.fields = "photo_100";
 			return next();
 		};
 
 		mockFetch.mockResolvedValueOnce(
-			mockResponse({ ok: true, result: { message_id: 1 } }),
+			mockResponse({ response: [{ id: 1 }] }),
 		);
 
-		const t = new Telegram("tok", { middlewares: [appendText] });
-		await t.api.sendMessage({ chat_id: 1, text: "hi" });
+		const vk = new VK("tok", { middlewares: [addField] });
+		await vk.api.users.get({ user_ids: [1] });
 
 		const body = JSON.parse(mockFetch.mock.calls[0][1]?.body as string);
-		expect(body.text).toBe("hi (modified)");
+		expect(body.fields).toBe("photo_100");
 	});
 
 	it("should allow middleware to set formData", async () => {
-		const fakeFiles: Middleware = async (ctx, next) => {
+		const fakeUpload: Middleware = async (ctx, next) => {
 			const fd = new FormData();
 			fd.set("photo", new Blob(["fake"]), "photo.jpg");
 			ctx.formData = fd;
-			// clear params so they don't go to URL
-			ctx.params = {} as typeof ctx.params;
+			ctx.params = {};
 			return next();
 		};
 
 		mockFetch.mockResolvedValueOnce(
-			mockResponse({ ok: true, result: { message_id: 1 } }),
+			mockResponse({ response: { id: 1 } }),
 		);
 
-		const t = new Telegram("tok", { middlewares: [fakeFiles] });
-		await t.api.sendPhoto({ chat_id: 1, photo: "" });
+		const vk = new VK("tok", { middlewares: [fakeUpload] });
+		await vk.api.photos.save({ album_id: 1 });
 
 		const [url, init] = mockFetch.mock.calls[0];
 		expect(init?.body).toBeInstanceOf(FormData);
 		// No Content-Type header when using FormData (browser sets boundary)
 		expect((init?.headers as Headers).has("Content-Type")).toBe(false);
+		// Auth params go to URL query string
+		expect(url).toContain("access_token=tok");
+		expect(url).toContain("v=5.199");
 	});
 
 	it("should allow middleware to catch errors", async () => {
@@ -268,7 +285,7 @@ describe("middlewares", () => {
 			try {
 				return await next();
 			} catch (err) {
-				if (err instanceof TelegramError) {
+				if (err instanceof VKAPIError) {
 					caughtMethod = err.method;
 				}
 				throw err;
@@ -277,32 +294,34 @@ describe("middlewares", () => {
 
 		mockFetch.mockResolvedValueOnce(
 			mockResponse({
-				ok: false,
-				error_code: 400,
-				description: "Bad Request",
+				error: {
+					error_code: 5,
+					error_msg: "User authorization failed",
+					request_params: [],
+				},
 			}),
 		);
 
-		const t = new Telegram("tok", { middlewares: [errorCatcher] });
+		const vk = new VK("tok", { middlewares: [errorCatcher] });
 
 		try {
-			await t.api.sendMessage({ chat_id: 0, text: "" });
+			await vk.api.users.get({ user_ids: [1] });
 		} catch {
 			// expected
 		}
 
-		expect(caughtMethod).toBe("sendMessage");
+		expect(caughtMethod).toBe("users.get");
 	});
 
 	it("should skip middlewares when array is empty", async () => {
 		mockFetch.mockResolvedValueOnce(
-			mockResponse({ ok: true, result: true }),
+			mockResponse({ response: true }),
 		);
 
-		const t = new Telegram("tok");
-		const result = await t.api.getMe();
+		const vk = new VK("tok");
+		const result = await vk.api.account.getProfileInfo();
 
-		expect(result).toBe(true);
+		expect(result).toEqual(true);
 	});
 });
 
@@ -312,7 +331,7 @@ describe("withRetries", () => {
 		expect(result).toBe(42);
 	});
 
-	it("should rethrow non-TelegramError", async () => {
+	it("should rethrow non-VKAPIError", async () => {
 		const err = new Error("boom");
 		try {
 			await withRetries(() => Promise.reject(err));
@@ -322,28 +341,30 @@ describe("withRetries", () => {
 		}
 	});
 
-	it("should retry on retry_after", async () => {
+	it("should retry on error code 6 (Too many requests)", async () => {
 		let attempt = 0;
 
 		mockFetch.mockImplementation(async () => {
 			attempt++;
 			if (attempt === 1) {
 				return mockResponse({
-					ok: false,
-					error_code: 429,
-					description: "Too Many Requests",
-					parameters: { retry_after: 0.01 },
+					error: {
+						error_code: 6,
+						error_msg: "Too many requests per second",
+						request_params: [],
+					},
 				});
 			}
-			return mockResponse({ ok: true, result: { message_id: 1 } });
+			return mockResponse({ response: [{ id: 1 }] });
 		});
 
-		const t = new Telegram("tok");
-		const result = await withRetries(() =>
-			t.api.sendMessage({ chat_id: 1, text: "hi" }),
+		const vk = new VK("tok");
+		const result = await withRetries(
+			() => vk.api.users.get({ user_ids: [1] }),
+			{ delay: 10 },
 		);
 
-		expect(result).toEqual({ message_id: 1 });
+		expect(result).toEqual([{ id: 1 }]);
 		expect(attempt).toBe(2);
 	});
 });

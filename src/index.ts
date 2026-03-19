@@ -1,15 +1,10 @@
 /**
- * Simple and tiny Telegram Bot API wrapper with middleware chain, configurable fetch, and opt-in file/format support
+ * Simple and tiny VK API wrapper with middleware chain, configurable fetch, and type safety
  * @module
  */
+import type { APIMethods } from "@vkraft/types";
+import { VKAPIError } from "./errors.ts";
 import type {
-	APIMethodParams,
-	APIMethods,
-	TelegramAPIResponse,
-} from "@gramio/types";
-import { TelegramError } from "./errors.ts";
-import type {
-	MaybeSuppressedParams,
 	Middleware,
 	MiddlewareContext,
 	RequestOptions,
@@ -17,18 +12,23 @@ import type {
 } from "./types.ts";
 import { simplifyObject } from "./utils.ts";
 
-export { TelegramError } from "./errors.ts";
-export { getUpdates, withRetries } from "./utils.ts";
+export { VKAPIError } from "./errors.ts";
+export { withRetries } from "./utils.ts";
 export type * from "./types.ts";
-export type * from "@gramio/types";
+export type * from "@vkraft/types";
 
 /**
- * Options for {@link Telegram}
+ * Options for {@link VK}
  */
-export interface TelegramOptions {
+export interface VKOptions {
 	/**
-	 * URL which will be used to send requests to.
-	 * @default "https://api.telegram.org/bot"
+	 * VK API version.
+	 * @default "5.199"
+	 */
+	v?: string;
+	/**
+	 * Base URL for API requests.
+	 * @default "https://api.vk.com/method/"
 	 */
 	baseURL?: string;
 	/**
@@ -45,12 +45,10 @@ export interface TelegramOptions {
 	 *
 	 * @example
 	 * ```ts
-	 * import { Telegram } from "wrappergram";
-	 * import { filesMiddleware } from "@gramio/files/middleware";
-	 * import { formatMiddleware } from "@gramio/format/middleware";
+	 * import { VK } from "@vkraft/api";
 	 *
-	 * const telegram = new Telegram("BOT_TOKEN", {
-	 *     middlewares: [formatMiddleware, filesMiddleware],
+	 * const vk = new VK("ACCESS_TOKEN", {
+	 *     middlewares: [loggerMiddleware],
 	 * });
 	 * ```
 	 */
@@ -60,103 +58,125 @@ export interface TelegramOptions {
 /**
  * Main class of the library.
  *
- * Use {@link Telegram.api | api} to call Telegram Bot API methods.
- * Pass middlewares via {@link TelegramOptions.middlewares | options.middlewares}.
+ * Use {@link VK.api | api} to call VK API methods via two-level proxy (`vk.api.users.get(...)`).
+ * Pass middlewares via {@link VKOptions.middlewares | options.middlewares}.
  *
  * Without middlewares it's just `fetch` + `JSON.stringify` — zero overhead.
  *
  * @example
  * ```ts
- * import { Telegram } from "wrappergram";
+ * import { VK } from "@vkraft/api";
  *
- * const telegram = new Telegram("BOT_TOKEN");
+ * const vk = new VK("ACCESS_TOKEN");
  *
- * const result = await telegram.api.sendMessage({
- *     chat_id: "@gramio_forum",
- *     text: "Hello, world!"
+ * const users = await vk.api.users.get({
+ *     user_ids: [1],
  * });
  * ```
  */
-export class Telegram {
-	/** Bot token */
+export class VK {
+	/** Access token */
 	token: string;
-	/** Class {@link TelegramOptions | options} */
-	options: TelegramOptions & { baseURL: string };
+	/** Class {@link VKOptions | options} */
+	options: VKOptions & { baseURL: string; v: string };
 
 	private middlewares: Middleware[];
 
 	/** Create new instance */
-	constructor(token: string, options?: TelegramOptions) {
+	constructor(token: string, options?: VKOptions) {
 		this.token = token;
-		this.options = { baseURL: "https://api.telegram.org/bot", ...options };
+		this.options = {
+			v: "5.199",
+			baseURL: "https://api.vk.com/method/",
+			...options,
+		};
 		this.middlewares = options?.middlewares ?? [];
 	}
 
 	/**
-	 * Send requests to Telegram Bot API.
+	 * Send requests to VK API.
 	 *
-	 * Returns the API result directly (unwrapped from `{ ok, result }`).
-	 * Throws {@link TelegramError} on failure, unless `suppress: true` is passed.
+	 * Two-level proxy: `vk.api.users.get(params)` calls `users.get` method.
+	 *
+	 * Returns the API result directly (unwrapped from `{ response }`).
+	 * Throws {@link VKAPIError} on failure, unless `suppress: true` is passed.
 	 *
 	 * @example
 	 * ```ts
-	 * const message = await telegram.api.sendMessage({
-	 *     chat_id: "@gramio_forum",
-	 *     text: "Hello, world!"
+	 * const users = await vk.api.users.get({
+	 *     user_ids: [1],
 	 * });
 	 *
 	 * // With error suppression
-	 * const result = await telegram.api.sendMessage({
+	 * const result = await vk.api.wall.post({
 	 *     suppress: true,
-	 *     chat_id: "@not_found",
-	 *     text: "test"
+	 *     message: "Hello!",
 	 * });
-	 * if (result instanceof TelegramError) console.error(result.message);
+	 * if (result instanceof VKAPIError) console.error(result.message);
 	 *
 	 * // With per-request fetch options (second argument)
-	 * await telegram.api.sendMessage(
-	 *     { chat_id: 123, text: "hi" },
+	 * await vk.api.users.get(
+	 *     { user_ids: [1] },
 	 *     { signal: AbortSignal.timeout(5000) },
 	 * );
 	 * ```
 	 */
-	readonly api = new Proxy({} as SuppressedAPIMethods, {
-		get: <T extends keyof SuppressedAPIMethods>(
-			_target: SuppressedAPIMethods,
-			method: T,
-		) =>
-			// biome-ignore lint/suspicious/noAssignInExpressions: cache the function
-			(_target[method] ??= ((
-				args: MaybeSuppressedParams<T>,
-				requestOptions?: RequestOptions,
-			) => {
-				const callSite = new Error();
-				if (Error.captureStackTrace) {
-					Error.captureStackTrace(callSite, _target[method] as Function);
-				}
-				return this._callApi(method, args, requestOptions, callSite);
-			}) as SuppressedAPIMethods[T]),
-	});
+	readonly api = new Proxy(
+		{} as Record<string, Record<string, Function>> as unknown as SuppressedAPIMethods,
+		{
+			get: (
+				_target: Record<string, Record<string, Function>>,
+				category: string,
+			) =>
+				// biome-ignore lint/suspicious/noAssignInExpressions: cache the category proxy
+				(_target[category] ??= new Proxy(
+					{} as Record<string, Function>,
+					{
+						get: (
+							_catTarget: Record<string, Function>,
+							method: string,
+						) =>
+							// biome-ignore lint/suspicious/noAssignInExpressions: cache the method function
+							(_catTarget[method] ??= (
+								args: Record<string, unknown>,
+								requestOptions?: RequestOptions,
+							) => {
+								const callSite = new Error();
+								if (Error.captureStackTrace) {
+									Error.captureStackTrace(
+										callSite,
+										_catTarget[method],
+									);
+								}
+								return this._callApi(
+									`${category}.${method}`,
+									args,
+									requestOptions,
+									callSite,
+								);
+							}),
+					},
+				)),
+		},
+	);
 
-	private async _callApi<T extends keyof APIMethods>(
-		method: T,
-		params: MaybeSuppressedParams<T> = {} as MaybeSuppressedParams<T>,
+	private async _callApi(
+		method: string,
+		params: Record<string, unknown> = {},
 		perRequestOptions?: RequestOptions,
 		callSite?: Error,
 	) {
 		// Extract suppress flag, keep only API params
-		const suppress = (params as Record<string, unknown>)?.suppress as
-			| boolean
-			| undefined;
+		const suppress = params?.suppress as boolean | undefined;
 
-		const apiParams = { ...params } as Record<string, unknown>;
+		const apiParams = { ...params };
 		delete apiParams.suppress;
 
 		// Shared mutable context for middleware chain
-		const context = { method, params: apiParams } as MiddlewareContext;
+		const context: MiddlewareContext = { method, params: apiParams };
 
 		const executeCall = async () => {
-			let url = `${this.options.baseURL}${this.token}/${context.method}`;
+			let url = `${this.options.baseURL}${context.method}`;
 
 			// Merge fetch options: global → per-request
 			const reqOptions: RequestInit = {
@@ -174,11 +194,23 @@ export class Telegram {
 			if (context.formData) {
 				reqOptions.body = context.formData;
 
+				// Auth params go to URL query string when using FormData
+				const queryParams: Record<string, string> = {
+					access_token: this.token,
+					v: this.options.v,
+				};
+
 				if (context.params && Object.keys(context.params).length) {
-					url += `?${new URLSearchParams(simplifyObject(context.params as Record<string, unknown>)).toString()}`;
+					Object.assign(queryParams, simplifyObject(context.params));
 				}
+
+				url += `?${new URLSearchParams(queryParams).toString()}`;
 			} else {
-				reqOptions.body = JSON.stringify(context.params);
+				reqOptions.body = JSON.stringify({
+					...context.params,
+					access_token: this.token,
+					v: this.options.v,
+				});
 				(reqOptions.headers as Headers).set(
 					"Content-Type",
 					"application/json",
@@ -186,13 +218,15 @@ export class Telegram {
 			}
 
 			const response = await fetch(url, reqOptions);
-			const data = (await response.json()) as TelegramAPIResponse;
+			const data = (await response.json()) as
+				| { response: unknown }
+				| { error: import("@vkraft/types").VKError };
 
-			if (!data.ok) {
-				const err = new TelegramError(
-					data,
+			if ("error" in data) {
+				const err = new VKAPIError(
+					data.error,
 					method,
-					context.params as APIMethodParams<T>,
+					context.params,
 					callSite,
 				);
 
@@ -200,7 +234,7 @@ export class Telegram {
 				return err;
 			}
 
-			return data.result;
+			return data.response;
 		};
 
 		// Compose middleware chain

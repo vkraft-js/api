@@ -1,80 +1,49 @@
-import type { TelegramUpdate } from "@gramio/types";
-import type { Telegram } from "./index.ts";
-import { TelegramError } from "./errors.ts";
-
-/**
- * A generator function that implements [long-polling](https://en.wikipedia.org/wiki/Push_technology#Long_polling)
- * via {@link APIMethods.getUpdates | getUpdates} and returns an {@link TelegramUpdate | Update} when it is received
- *
- * @example
- * ```ts
- * for await (const update of getUpdates(telegram)) {
- * 	console.log(update);
- * 	if (update.message?.from) {
- * 		telegram.api.sendMessage({
- * 			chat_id: update.message.from.id,
- * 			text: "Hi! Thank you for the message",
- * 		});
- * 	}
- * }
- * ```
- */
-export async function* getUpdates(telegram: Telegram) {
-	let offset = 0;
-
-	while (true) {
-		const updates = await telegram.api.getUpdates({
-			suppress: true,
-			offset,
-		});
-
-		if (updates instanceof TelegramError || !updates.length) continue;
-
-		for (const update of updates) {
-			yield update;
-			offset = update.update_id + 1;
-		}
-	}
-}
+import { VKAPIError } from "./errors.ts";
 
 /** @internal */
 export const sleep = (ms: number) =>
 	new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
- * Wraps an API call and automatically retries when Telegram returns `retry_after`.
+ * Wraps an API call and automatically retries on VK error code 6 (Too many requests per second).
+ *
+ * @param fn - Function that performs the API call
+ * @param options - Retry options
+ * @param options.delay - Delay between retries in ms (default: 350)
+ * @param options.maxRetries - Maximum number of retries (default: 3)
  *
  * @example
  * ```ts
- * import { Telegram } from "wrappergram";
- * import { withRetries } from "wrappergram";
+ * import { VK } from "@vkraft/api";
+ * import { withRetries } from "@vkraft/api/utils";
  *
- * const telegram = new Telegram("BOT_TOKEN");
+ * const vk = new VK("ACCESS_TOKEN");
  *
- * // Automatically waits and retries on 429 Too Many Requests
+ * // Automatically waits and retries on error code 6
  * const result = await withRetries(() =>
- *     telegram.api.sendMessage({
- *         chat_id: "@gramio_forum",
- *         text: "Hello!",
- *     })
+ *     vk.api.users.get({ user_ids: [1] })
  * );
  * ```
  */
 export async function withRetries<Result>(
 	fn: () => Promise<Result>,
+	options?: { delay?: number; maxRetries?: number },
 ): Promise<Result> {
+	const delay = options?.delay ?? 350;
+	const maxRetries = options?.maxRetries ?? 3;
+	let retries = 0;
+
 	let result = await suppressError(fn);
 
-	while (result.value instanceof TelegramError) {
-		const retryAfter = result.value.payload?.retry_after;
-
-		if (retryAfter) {
-			await sleep(retryAfter * 1000);
-			result = await suppressError(fn);
-		} else {
+	while (result.value instanceof VKAPIError && result.value.code === 6) {
+		if (retries >= maxRetries) {
 			if (result.caught) throw result.value;
-			return result.value;
+			return result.value as Result;
 		}
+
+		retries++;
+		await sleep(delay);
+		result = await suppressError(fn);
 	}
 
 	if (result.caught) throw result.value;
